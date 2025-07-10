@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  dolibarr-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: dolibarr-mcp-server
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - DOLIBARR_URL=${DOLIBARR_URL}
+      - DOLIBARR_API_KEY=${DOLIBARR_API_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "dolibarr-mcp", "test"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - dolibarr-mcp-network
+    volumes:
+      # Optional: Mount logs directory
+      - ./logs:/app/logs:rw
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dolibarr-mcp.rule=Host(`dolibarr-mcp.localhost`)"
+      - "traefik.http.routers.dolibarr-mcp.entrypoints=web"
+      - "traefik.http.services.dolibarr-mcp.loadbalancer.server.port=8080"
+
+  # Optional: Development service with hot reload
+  dolibarr-mcp-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    container_name: dolibarr-mcp-dev
+    restart: "no"
+    ports:
+      - "8081:8080"
+    environment:
+      - DOLIBARR_URL=${DOLIBARR_URL}
+      - DOLIBARR_API_KEY=${DOLIBARR_API_KEY}
+      - LOG_LEVEL=DEBUG
+    env_file:
+      - .env
+    volumes:
+      - .:/app:rw
+      - /app/src/dolibarr_mcp.egg-info  # Exclude egg-info
+    working_dir: /app
+    command: ["python", "-m", "dolibarr_mcp.cli", "serve"]
+    networks:
+      - dolibarr-mcp-network
+    profiles:
+      - dev
+
+  # Optional: Reverse proxy for production deployment
+  traefik:
+    image: traefik:v2.10
+    container_name: dolibarr-mcp-traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "8090:8080"  # Traefik dashboard
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - dolibarr-mcp-network
+    profiles:
+      - proxy
+
+networks:
+  dolibarr-mcp-network:
+    driver: bridge
+    name: dolibarr-mcp-network
+
+volumes:
+  logs:
+    driver: local
