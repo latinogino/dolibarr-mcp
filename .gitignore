@@ -25,6 +25,8 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+src/*.egg-info/
+*.egg-info
 
 # PyInstaller
 *.manifest
@@ -57,6 +59,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+venv_dolibarr/
 
 # IDEs
 .vscode/
@@ -83,3 +86,7 @@ mcp-server.log
 
 # Dolibarr specific
 dolibarr_config.json
+
+# Local development
+local/
+.local/
