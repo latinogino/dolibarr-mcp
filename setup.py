@@ -1,105 +1,49 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""Setup script for Dolibarr MCP development environment."""
+"""Setup script for Dolibarr MCP package."""
 
+from setuptools import setup, find_packages
 import os
-import subprocess
-import sys
-import platform
-import io
 
-# Ensure stdout can handle Unicode characters on Windows
-if platform.system() == 'Windows':
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+# Read the README file
+here = os.path.abspath(os.path.dirname(__file__))
+with open(os.path.join(here, 'README.md'), encoding='utf-8') as f:
+    long_description = f.read()
 
-def run_command(command, shell=False):
-    """Run a command and handle errors."""
-    try:
-        result = subprocess.run(command, shell=shell, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace')
-        command_str = ' '.join(command) if isinstance(command, list) else command
-        print(f"[OK] {command_str}")
-        return result.stdout
-    except subprocess.CalledProcessError as e:
-        command_str = ' '.join(command) if isinstance(command, list) else command
-        print(f"[ERROR] Command failed: {command_str}")
-        print(f"Error: {e.stderr}")
-        return None
-
-def setup_development_environment():
-    """Set up the development environment for Dolibarr MCP."""
-    print("Setting up Dolibarr MCP Development Environment...")
-    
-    # Determine platform-specific paths
-    if platform.system() == "Windows":
-        venv_name = "venv_dolibarr"
-        python_exe = os.path.join(venv_name, "Scripts", "python.exe")
-        pip_exe = os.path.join(venv_name, "Scripts", "pip.exe")
-    else:
-        venv_name = "venv_dolibarr"
-        python_exe = os.path.join(venv_name, "bin", "python")
-        pip_exe = os.path.join(venv_name, "bin", "pip")
-    
-    # Create virtual environment
-    print(f"Creating virtual environment: {venv_name}")
-    if run_command([sys.executable, "-m", "venv", venv_name]):
-        print(f"Virtual environment created at: {os.path.abspath(venv_name)}")
-    
-    # Upgrade pip
-    print("Upgrading pip...")
-    run_command([python_exe, "-m", "pip", "install", "--upgrade", "pip"])
-    
-    # Install requirements
-    if os.path.exists("requirements.txt"):
-        print("Installing requirements from requirements.txt...")
-        run_command([pip_exe, "install", "-r", "requirements.txt"])
-    
-    # Install package in development mode
-    print("Installing package in development mode...")
-    run_command([pip_exe, "install", "-e", "."])
-    
-    # Create .env file if it doesn't exist
-    if not os.path.exists(".env"):
-        print("Creating .env file from template...")
-        if os.path.exists(".env.example"):
-            import shutil
-            shutil.copy(".env.example", ".env")
-            print("Please edit .env file with your Dolibarr credentials")
-        else:
-            with open(".env", "w", encoding='utf-8') as f:
-                f.write("# Dolibarr MCP Configuration\n")
-                f.write("DOLIBARR_URL=https://your-dolibarr-instance.com/api/index.php\n")
-                f.write("DOLIBARR_API_KEY=your_api_key_here\n")
-                f.write("LOG_LEVEL=INFO\n")
-            print("Please edit .env file with your Dolibarr credentials")
-    
-    print("\nDevelopment environment setup complete!")
-    print(f"Python executable: {os.path.abspath(python_exe)}")
-    print(f"Virtual environment: {os.path.abspath(venv_name)}")
-    print("\nNext steps:")
-    print("1. Edit .env file with your Dolibarr instance details")
-    print("2. Test the connection: python -m dolibarr_mcp.dolibarr_mcp_server")
-    print("3. Or run with Docker: docker-compose up")
-
-def test_installation():
-    """Test if the installation works."""
-    print("\nTesting installation...")
-    
-    # Determine platform-specific python path
-    if platform.system() == "Windows":
-        python_exe = os.path.join("venv_dolibarr", "Scripts", "python.exe")
-    else:
-        python_exe = os.path.join("venv_dolibarr", "bin", "python")
-    
-    # Test import
-    test_command = [python_exe, "-c", "from dolibarr_mcp.config import Config; print('[OK] Import test passed')"]
-    if run_command(test_command):
-        print("Installation test passed!")
-        return True
-    else:
-        print("Installation test failed!")
-        return False
-
-if __name__ == "__main__":
-    setup_development_environment()
-    test_installation()
+setup(
+    name='dolibarr-mcp',
+    version='1.0.0',
+    description='Professional Model Context Protocol server for complete Dolibarr ERP management',
+    long_description=long_description,
+    long_description_content_type='text/markdown',
+    url='https://github.com/latinogino/dolibarr-mcp',
+    author='Dolibarr MCP Team',
+    license='MIT',
+    classifiers=[
+        'Development Status :: 5 - Production/Stable',
+        'Intended Audience :: Developers',
+        'License :: OSI Approved :: MIT License',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+    ],
+    keywords='dolibarr mcp erp api integration',
+    package_dir={'': 'src'},
+    packages=find_packages(where='src'),
+    python_requires='>=3.8',
+    install_requires=[
+        'mcp>=1.0.0',
+        'requests>=2.31.0',
+        'aiohttp>=3.9.0',
+        'pydantic>=2.5.0',
+        'click>=8.1.0',
+        'python-dotenv>=1.0.0',
+        'typing-extensions>=4.8.0',
+    ],
+    entry_points={
+        'console_scripts': [
+            'dolibarr-mcp=dolibarr_mcp.cli:main',
+        ],
+    },
+)
