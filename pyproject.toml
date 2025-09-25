@@ -4,20 +4,20 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dolibarr-mcp"
-version = "1.0.1"
-description = "Professional Model Context Protocol server for complete Dolibarr ERP management with comprehensive CRUD operations and business intelligence"
+version = "1.0.0"
+description = "Professional Model Context Protocol server for complete Dolibarr ERP/CRM management"
 readme = "README.md"
 requires-python = ">=3.8"
 authors = [
     {name = "Dolibarr MCP Team"}
 ]
 keywords = [
-    "dolibarr", "mcp", "model-context-protocol", "erp", "api", 
-    "business-management", "crm", "accounting", "automation", "unified-api",
-    "customer-management", "invoice-management", "product-management", "order-management"
+    "dolibarr", "mcp", "model-context-protocol", "erp", "crm", "api", 
+    "business-management", "automation", "unified-api",
+    "invoice-management", "customer-management", "product-management"
 ]
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
     "License :: OSI Approved :: MIT License",
@@ -29,11 +29,11 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
-    "Topic :: Office/Business :: Financial :: Accounting",
+    "Topic :: Office/Business",
     "Topic :: System :: Systems Administration",
 ]
 dependencies = [
-    "mcp>=0.9.0",
+    "mcp>=1.0.0",
     "requests>=2.31.0",
     "aiohttp>=3.9.0",
     "pydantic>=2.5.0",
