@@ -16,7 +16,7 @@ class Config(BaseModel):
     
     dolibarr_url: str = Field(
         description="Dolibarr API URL",
-        default_factory=lambda: os.getenv("DOLIBARR_URL", "")
+        default_factory=lambda: os.getenv("DOLIBARR_URL") or os.getenv("DOLIBARR_BASE_URL", "")
     )
     
     api_key: str = Field(
@@ -34,11 +34,14 @@ class Config(BaseModel):
         """Validate Dolibarr URL."""
         if not v:
             # Print warning but don't fail
-            print("⚠️ DOLIBARR_URL not configured - API calls will fail", file=sys.stderr)
+            print("⚠️ DOLIBARR_URL/DOLIBARR_BASE_URL not configured - API calls will fail", file=sys.stderr)
             return "https://your-dolibarr-instance.com/api/index.php"
         
         if not v.startswith(('http://', 'https://')):
             raise ValueError("DOLIBARR_URL must start with http:// or https://")
+        
+        # Remove trailing slash if present
+        v = v.rstrip('/')
         
         # Ensure it ends with the proper API path
         if not v.endswith('/api/index.php'):
@@ -46,10 +49,14 @@ class Config(BaseModel):
             if '/api' in v:
                 # Just ensure it ends properly
                 if not v.endswith('/index.php'):
-                    v = v.rstrip('/') + '/index.php'
+                    # Check if it ends with /api/index.php/
+                    if v.endswith('/index.php/'):
+                        v = v[:-1]  # Remove trailing slash
+                    elif not v.endswith('/index.php'):
+                        v = v + '/index.php'
             else:
                 # Add the full API path
-                v = v.rstrip('/') + '/api/index.php'
+                v = v + '/api/index.php'
                 
         return v
     
@@ -79,7 +86,13 @@ class Config(BaseModel):
     def from_env(cls) -> "Config":
         """Create configuration from environment variables with validation."""
         try:
-            return cls()
+            config = cls()
+            # Debug output for troubleshooting
+            if os.getenv("DEBUG_CONFIG"):
+                print(f"✅ Config loaded:", file=sys.stderr)
+                print(f"   URL: {config.dolibarr_url}", file=sys.stderr)
+                print(f"   API Key: {'*' * 10 if config.api_key else 'NOT SET'}", file=sys.stderr)
+            return config
         except Exception as e:
             print(f"❌ Configuration Error: {e}", file=sys.stderr)
             print(file=sys.stderr)
@@ -87,6 +100,7 @@ class Config(BaseModel):
             print("1. Copy .env.example to .env", file=sys.stderr)
             print("2. Edit .env with your Dolibarr details:", file=sys.stderr)
             print("   DOLIBARR_URL=https://your-dolibarr-instance.com", file=sys.stderr)
+            print("   (or DOLIBARR_BASE_URL=https://your-dolibarr-instance.com/api/index.php/)", file=sys.stderr)
             print("   DOLIBARR_API_KEY=your_api_key_here", file=sys.stderr)
             print(file=sys.stderr)
             print("🔧 Dolibarr API Key Setup:", file=sys.stderr)
