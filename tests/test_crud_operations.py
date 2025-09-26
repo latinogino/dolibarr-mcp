@@ -10,28 +10,30 @@ import asyncio
 from datetime import datetime
 from unittest.mock import Mock, patch, AsyncMock
 
-from dolibarr_mcp import DolibarrClient, DolibarrMCPServer
+# Add src to path for imports
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+from dolibarr_mcp import DolibarrClient, Config
 
 
 class TestCRUDOperations:
     """Test complete CRUD operations for all Dolibarr entities."""
     
     @pytest.fixture
-    def client(self):
-        """Create a test client instance."""
-        return DolibarrClient(
-            url="https://test.dolibarr.com",
-            api_key="test_api_key"
+    def config(self):
+        """Create a test configuration."""
+        return Config(
+            dolibarr_url="https://test.dolibarr.com",
+            dolibarr_api_key="test_api_key",
+            log_level="INFO"
         )
     
     @pytest.fixture
-    def server(self):
-        """Create a test server instance."""
-        with patch('dolibarr_mcp.dolibarr_mcp_server.Config') as mock_config:
-            mock_config.return_value.dolibarr_url = "https://test.dolibarr.com"
-            mock_config.return_value.dolibarr_api_key = "test_api_key"
-            mock_config.return_value.log_level = "INFO"
-            return DolibarrMCPServer()
+    def client(self, config):
+        """Create a test client instance."""
+        return DolibarrClient(config)
     
     # Customer (Third Party) CRUD Tests
     
@@ -297,30 +299,41 @@ class TestMCPServerIntegration:
     @pytest.mark.asyncio
     async def test_server_initialization(self):
         """Test server initialization and configuration."""
-        with patch('dolibarr_mcp.config.Config') as mock_config:
-            mock_config.return_value.dolibarr_url = "https://test.com"
-            mock_config.return_value.dolibarr_api_key = "key"
-            mock_config.return_value.log_level = "INFO"
+        with patch('dolibarr_mcp.config.Config') as mock_config_class:
+            mock_config_class.return_value = Config(
+                dolibarr_url="https://test.com",
+                dolibarr_api_key="key",
+                log_level="INFO"
+            )
             
-            server = DolibarrMCPServer()
-            assert server is not None
-            assert hasattr(server, 'client')
+            # Import the server module to test initialization
+            from dolibarr_mcp import dolibarr_mcp_server
+            assert dolibarr_mcp_server.server is not None
     
     @pytest.mark.asyncio
     async def test_server_tool_execution(self):
-        """Test server tool execution."""
-        with patch('dolibarr_mcp.dolibarr_mcp_server.DolibarrClient') as mock_client:
-            server = DolibarrMCPServer()
-            
-            # Mock tool execution
-            mock_client.return_value.get_customers = AsyncMock(return_value=[
+        """Test server tool execution via client."""
+        config = Config(
+            dolibarr_url="https://test.com",
+            dolibarr_api_key="key",
+            log_level="INFO"
+        )
+        
+        with patch('dolibarr_mcp.dolibarr_client.DolibarrClient') as mock_client_class:
+            mock_client = mock_client_class.return_value
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.get_customers = AsyncMock(return_value=[
                 {"id": 1, "name": "Test Company"}
             ])
             
-            # Simulate tool call
-            result = await server.client.get_customers()
-            assert len(result) == 1
-            assert result[0]["name"] == "Test Company"
+            # Create real client
+            async with DolibarrClient(config) as client:
+                # Mock the request
+                client.get_customers = mock_client.get_customers
+                result = await client.get_customers()
+                assert len(result) == 1
+                assert result[0]["name"] == "Test Company"
 
 
 if __name__ == "__main__":
