@@ -1,13 +1,7 @@
 # Dolibarr MCP Server
 
 Dolibarr MCP is a focused Model Context Protocol (MCP) server that exposes the
-most useful Dolibarr ERP/CRM operations to AI copilots. The repository mirrors
-the clean layout used by [`prestashop-mcp`](https://github.com/latinogino/prestashop-mcp):
-a single production-ready server implementation, an async HTTP client, and a
-self-contained documentation bundle.
-
-| Path | Purpose |
-| --- | --- |
+most useful Dolibarr ERP/CRM operations to AI copilots.
 
 This MCP server enables complete management of your Dolibarr ERP/CRM through AI
 tools such as Claude Desktop. With specialised tools you can manage customers,
