@@ -11,7 +11,7 @@ from .dolibarr_mcp_server import main as server_main
 
 
 @click.group()
-@click.version_option(version="1.0.1", prog_name="dolibarr-mcp")
+@click.version_option(version="1.1.0", prog_name="dolibarr-mcp")
 def cli():
     """Dolibarr MCP Server - Professional ERP integration via Model Context Protocol."""
     pass
@@ -91,7 +91,7 @@ def serve(host: str, port: int):
 @cli.command()
 def version():
     """Show version information."""
-    click.echo("Dolibarr MCP Server v1.0.1")
+    click.echo("Dolibarr MCP Server v1.1.0")
     click.echo("Professional ERP integration via Model Context Protocol")
 
 
