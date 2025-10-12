@@ -5,6 +5,23 @@ All notable changes to the Dolibarr MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- Clarified cross-platform installation instructions, including Visual Studio developer shell usage on Windows.
+- Trimmed runtime dependencies to match the actual imports and exposed developer extras for the test tooling.
+
+## [1.1.0] - 2024-05-22
+
+### Removed
+- Legacy helper scripts, installers and manual test programs that duplicated the automated test-suite
+- Alternative server implementations (`simple_client`, `standalone_server`, `ultra_simple_server`) in favour of the single `dolibarr_mcp_server`
+- Redundant documentation fragments and variant requirements files that no longer reflected the current project layout
+
+### Changed
+- Rewrote the README to highlight the streamlined structure and provide concise installation/run instructions
+- Clarified that `dolibarr_mcp_server.py` is the definitive MCP entry point
+
 ## [1.0.0] - 2024-01-26
 
 ### 🎯 Major Restructuring
@@ -26,12 +43,7 @@ This release represents a complete restructuring of the Dolibarr MCP Server to m
 - Streamlined .gitignore file
 
 ### Removed
-- All test scripts from root directory (moved to `tests/`)
-- Multiple batch files (consolidated functionality)
-- Alternative server implementations (simple_client, standalone_server, ultra_simple_server)
-- Redundant requirements files (kept only requirements.txt)
-- Unnecessary documentation files (CLAUDE_CONFIG.md, CONFIG_COMPATIBILITY.md, etc.)
-- API directory and contents
+- Outdated prototype assets from the first public release
 
 ### Technical Improvements
 - Single, focused MCP server implementation

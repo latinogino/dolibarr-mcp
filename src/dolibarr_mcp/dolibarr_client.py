@@ -2,8 +2,7 @@
 
 import json
 import logging
-from typing import Any, Dict, List, Optional, Union
-from urllib.parse import urljoin, quote
+from typing import Any, Dict, List, Optional
 
 import aiohttp
 from aiohttp import ClientSession, ClientTimeout
@@ -61,22 +60,50 @@ class DolibarrClient:
         if self.session:
             await self.session.close()
             self.session = None
+
+    @staticmethod
+    def _extract_identifier(response: Any) -> Any:
+        """Return the identifier from Dolibarr responses when available."""
+        if isinstance(response, dict):
+            if "id" in response:
+                return response["id"]
+            success = response.get("success")
+            if isinstance(success, dict) and "id" in success:
+                return success["id"]
+        return response
+
+    @staticmethod
+    def _merge_payload(data: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
+        """Merge an optional dictionary with keyword overrides."""
+        payload: Dict[str, Any] = {}
+        if data:
+            payload.update(data)
+        if kwargs:
+            payload.update(kwargs)
+        return payload
+
     
+    async def request(
+        self,
+        method: str,
+        endpoint: str,
+        params: Optional[Dict] = None,
+        data: Optional[Dict] = None
+    ) -> Dict[str, Any]:
+        """Public helper retained for compatibility with legacy integrations and tests."""
+        return await self._make_request(method, endpoint, params=params, data=data)
+
     def _build_url(self, endpoint: str) -> str:
         """Build full API URL."""
-        # Remove leading slash from endpoint
         endpoint = endpoint.lstrip('/')
-        
-        # Special handling for status endpoint
+        base = self.base_url.rstrip('/')
+
         if endpoint == "status":
-            # Try different possible locations for status endpoint
-            # Some Dolibarr versions have it at /api/status instead of /api/index.php/status
-            base = self.base_url.replace('/index.php', '')
-            return f"{base}/status"
-        
-        # For all other endpoints, use the standard format
-        return f"{self.base_url}/{endpoint}"
-    
+            base_without_index = base.replace('/index.php', '')
+            return f"{base_without_index}/status"
+
+        return f"{base}/{endpoint}"
+
     async def _make_request(
         self, 
         method: str, 
@@ -165,15 +192,19 @@ class DolibarrClient:
     # SYSTEM ENDPOINTS
     # ============================================================================
     
+    async def test_connection(self) -> Dict[str, Any]:
+        """Compatibility helper that proxies to get_status."""
+        return await self.get_status()
+
     async def get_status(self) -> Dict[str, Any]:
         """Get API status and version information."""
         try:
             # First try the standard status endpoint
-            return await self._make_request("GET", "status")
+            return await self.request("GET", "status")
         except DolibarrAPIError:
             # If status fails, try to get module list as a connectivity test
             try:
-                result = await self._make_request("GET", "setup/modules")
+                result = await self.request("GET", "setup/modules")
                 if result:
                     return {
                         "success": 1,
@@ -186,7 +217,7 @@ class DolibarrClient:
             
             # If all else fails, try a simple user list
             try:
-                result = await self._make_request("GET", "users?limit=1")
+                result = await self.request("GET", "users?limit=1")
                 if result is not None:
                     return {
                         "success": 1,
@@ -206,24 +237,36 @@ class DolibarrClient:
         if page > 1:
             params["page"] = page
         
-        result = await self._make_request("GET", "users", params=params)
+        result = await self.request("GET", "users", params=params)
         return result if isinstance(result, list) else []
     
     async def get_user_by_id(self, user_id: int) -> Dict[str, Any]:
         """Get specific user by ID."""
-        return await self._make_request("GET", f"users/{user_id}")
+        return await self.request("GET", f"users/{user_id}")
     
-    async def create_user(self, **kwargs) -> Dict[str, Any]:
+    async def create_user(
+        self,
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
         """Create a new user."""
-        return await self._make_request("POST", "users", data=kwargs)
-    
-    async def update_user(self, user_id: int, **kwargs) -> Dict[str, Any]:
+        payload = self._merge_payload(data, **kwargs)
+        result = await self.request("POST", "users", data=payload)
+        return self._extract_identifier(result)
+
+    async def update_user(
+        self,
+        user_id: int,
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
         """Update an existing user."""
-        return await self._make_request("PUT", f"users/{user_id}", data=kwargs)
-    
+        payload = self._merge_payload(data, **kwargs)
+        return await self.request("PUT", f"users/{user_id}", data=payload)
+
     async def delete_user(self, user_id: int) -> Dict[str, Any]:
         """Delete a user."""
-        return await self._make_request("DELETE", f"users/{user_id}")
+        return await self.request("DELETE", f"users/{user_id}")
     
     # ============================================================================
     # CUSTOMER/THIRD PARTY MANAGEMENT
@@ -235,56 +278,53 @@ class DolibarrClient:
         if page > 1:
             params["page"] = page
         
-        result = await self._make_request("GET", "thirdparties", params=params)
+        result = await self.request("GET", "thirdparties", params=params)
         return result if isinstance(result, list) else []
     
     async def get_customer_by_id(self, customer_id: int) -> Dict[str, Any]:
         """Get specific customer by ID."""
-        return await self._make_request("GET", f"thirdparties/{customer_id}")
+        return await self.request("GET", f"thirdparties/{customer_id}")
     
     async def create_customer(
         self,
-        name: str,
-        email: Optional[str] = None,
-        phone: Optional[str] = None,
-        address: Optional[str] = None,
-        town: Optional[str] = None,
-        zip: Optional[str] = None,
-        country_id: int = 1,
-        type: int = 1,  # 1=Customer, 2=Supplier, 3=Both
-        status: int = 1,
-        **kwargs
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
     ) -> Dict[str, Any]:
         """Create a new customer/third party."""
-        data = {
-            "name": name,
-            "status": status,
-            "client": type if type in [1, 3] else 0,
-            "fournisseur": 1 if type in [2, 3] else 0,
-            "country_id": country_id,
-            **kwargs
-        }
-        
-        if email:
-            data["email"] = email
-        if phone:
-            data["phone"] = phone
-        if address:
-            data["address"] = address
-        if town:
-            data["town"] = town
-        if zip:
-            data["zip"] = zip
-        
-        return await self._make_request("POST", "thirdparties", data=data)
-    
-    async def update_customer(self, customer_id: int, **kwargs) -> Dict[str, Any]:
+        payload = self._merge_payload(data, **kwargs)
+
+        type_value = payload.pop("type", None)
+        if type_value is not None:
+            payload.setdefault("client", 1 if type_value in (1, 3) else 0)
+            payload.setdefault("fournisseur", 1 if type_value in (2, 3) else 0)
+        else:
+            payload.setdefault("client", 1)
+
+        payload.setdefault("status", payload.get("status", 1))
+        payload.setdefault("country_id", payload.get("country_id", 1))
+
+        result = await self.request("POST", "thirdparties", data=payload)
+        return self._extract_identifier(result)
+
+    async def update_customer(
+        self,
+        customer_id: int,
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
         """Update an existing customer."""
-        return await self._make_request("PUT", f"thirdparties/{customer_id}", data=kwargs)
-    
+        payload = self._merge_payload(data, **kwargs)
+
+        type_value = payload.pop("type", None)
+        if type_value is not None:
+            payload["client"] = 1 if type_value in (1, 3) else 0
+            payload["fournisseur"] = 1 if type_value in (2, 3) else 0
+
+        return await self.request("PUT", f"thirdparties/{customer_id}", data=payload)
+
     async def delete_customer(self, customer_id: int) -> Dict[str, Any]:
         """Delete a customer."""
-        return await self._make_request("DELETE", f"thirdparties/{customer_id}")
+        return await self.request("DELETE", f"thirdparties/{customer_id}")
     
     # ============================================================================
     # PRODUCT MANAGEMENT
@@ -293,60 +333,36 @@ class DolibarrClient:
     async def get_products(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get list of products."""
         params = {"limit": limit}
-        result = await self._make_request("GET", "products", params=params)
+        result = await self.request("GET", "products", params=params)
         return result if isinstance(result, list) else []
     
     async def get_product_by_id(self, product_id: int) -> Dict[str, Any]:
         """Get specific product by ID."""
-        return await self._make_request("GET", f"products/{product_id}")
+        return await self.request("GET", f"products/{product_id}")
     
     async def create_product(
         self,
-        label: str,
-        price: float,
-        ref: Optional[str] = None,  # Product reference/SKU
-        description: Optional[str] = None,
-        stock: Optional[int] = None,
-        **kwargs
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
     ) -> Dict[str, Any]:
-        """Create a new product.
-        
-        Args:
-            label: Product name/label
-            price: Product price
-            ref: Product reference/SKU (required by Dolibarr, auto-generated if not provided)
-            description: Product description
-            stock: Initial stock quantity
-            **kwargs: Additional product fields
-        """
-        import time
-        
-        # Generate ref if not provided (required field in Dolibarr)
-        if ref is None:
-            ref = f"PROD-{int(time.time())}"
-        
-        data = {
-            "ref": ref,  # Required field
-            "label": label,
-            "price": price,
-            "price_ttc": price,  # Price including tax (using same as price for simplicity)
-            **kwargs
-        }
-        
-        if description:
-            data["description"] = description
-        if stock is not None:
-            data["stock"] = stock
-        
-        return await self._make_request("POST", "products", data=data)
-    
-    async def update_product(self, product_id: int, **kwargs) -> Dict[str, Any]:
+        """Create a new product or service."""
+        payload = self._merge_payload(data, **kwargs)
+        result = await self.request("POST", "products", data=payload)
+        return self._extract_identifier(result)
+
+    async def update_product(
+        self,
+        product_id: int,
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
         """Update an existing product."""
-        return await self._make_request("PUT", f"products/{product_id}", data=kwargs)
-    
+        payload = self._merge_payload(data, **kwargs)
+        return await self.request("PUT", f"products/{product_id}", data=payload)
+
     async def delete_product(self, product_id: int) -> Dict[str, Any]:
         """Delete a product."""
-        return await self._make_request("DELETE", f"products/{product_id}")
+        return await self.request("DELETE", f"products/{product_id}")
     
     # ============================================================================
     # INVOICE MANAGEMENT
@@ -358,42 +374,36 @@ class DolibarrClient:
         if status:
             params["status"] = status
         
-        result = await self._make_request("GET", "invoices", params=params)
+        result = await self.request("GET", "invoices", params=params)
         return result if isinstance(result, list) else []
     
     async def get_invoice_by_id(self, invoice_id: int) -> Dict[str, Any]:
         """Get specific invoice by ID."""
-        return await self._make_request("GET", f"invoices/{invoice_id}")
+        return await self.request("GET", f"invoices/{invoice_id}")
     
     async def create_invoice(
         self,
-        customer_id: int,
-        lines: List[Dict[str, Any]],
-        date: Optional[str] = None,
-        due_date: Optional[str] = None,
-        **kwargs
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
     ) -> Dict[str, Any]:
         """Create a new invoice."""
-        data = {
-            "socid": customer_id,
-            "lines": lines,
-            **kwargs
-        }
-        
-        if date:
-            data["date"] = date
-        if due_date:
-            data["due_date"] = due_date
-        
-        return await self._make_request("POST", "invoices", data=data)
-    
-    async def update_invoice(self, invoice_id: int, **kwargs) -> Dict[str, Any]:
+        payload = self._merge_payload(data, **kwargs)
+        result = await self.request("POST", "invoices", data=payload)
+        return self._extract_identifier(result)
+
+    async def update_invoice(
+        self,
+        invoice_id: int,
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
         """Update an existing invoice."""
-        return await self._make_request("PUT", f"invoices/{invoice_id}", data=kwargs)
-    
+        payload = self._merge_payload(data, **kwargs)
+        return await self.request("PUT", f"invoices/{invoice_id}", data=payload)
+
     async def delete_invoice(self, invoice_id: int) -> Dict[str, Any]:
         """Delete an invoice."""
-        return await self._make_request("DELETE", f"invoices/{invoice_id}")
+        return await self.request("DELETE", f"invoices/{invoice_id}")
     
     # ============================================================================
     # ORDER MANAGEMENT
@@ -405,25 +415,36 @@ class DolibarrClient:
         if status:
             params["status"] = status
         
-        result = await self._make_request("GET", "orders", params=params)
+        result = await self.request("GET", "orders", params=params)
         return result if isinstance(result, list) else []
     
     async def get_order_by_id(self, order_id: int) -> Dict[str, Any]:
         """Get specific order by ID."""
-        return await self._make_request("GET", f"orders/{order_id}")
+        return await self.request("GET", f"orders/{order_id}")
     
-    async def create_order(self, customer_id: int, **kwargs) -> Dict[str, Any]:
+    async def create_order(
+        self,
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
         """Create a new order."""
-        data = {"socid": customer_id, **kwargs}
-        return await self._make_request("POST", "orders", data=data)
-    
-    async def update_order(self, order_id: int, **kwargs) -> Dict[str, Any]:
+        payload = self._merge_payload(data, **kwargs)
+        result = await self.request("POST", "orders", data=payload)
+        return self._extract_identifier(result)
+
+    async def update_order(
+        self,
+        order_id: int,
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
         """Update an existing order."""
-        return await self._make_request("PUT", f"orders/{order_id}", data=kwargs)
-    
+        payload = self._merge_payload(data, **kwargs)
+        return await self.request("PUT", f"orders/{order_id}", data=payload)
+
     async def delete_order(self, order_id: int) -> Dict[str, Any]:
         """Delete an order."""
-        return await self._make_request("DELETE", f"orders/{order_id}")
+        return await self.request("DELETE", f"orders/{order_id}")
     
     # ============================================================================
     # CONTACT MANAGEMENT
@@ -432,24 +453,36 @@ class DolibarrClient:
     async def get_contacts(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get list of contacts."""
         params = {"limit": limit}
-        result = await self._make_request("GET", "contacts", params=params)
+        result = await self.request("GET", "contacts", params=params)
         return result if isinstance(result, list) else []
     
     async def get_contact_by_id(self, contact_id: int) -> Dict[str, Any]:
         """Get specific contact by ID."""
-        return await self._make_request("GET", f"contacts/{contact_id}")
+        return await self.request("GET", f"contacts/{contact_id}")
     
-    async def create_contact(self, **kwargs) -> Dict[str, Any]:
+    async def create_contact(
+        self,
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
         """Create a new contact."""
-        return await self._make_request("POST", "contacts", data=kwargs)
-    
-    async def update_contact(self, contact_id: int, **kwargs) -> Dict[str, Any]:
+        payload = self._merge_payload(data, **kwargs)
+        result = await self.request("POST", "contacts", data=payload)
+        return self._extract_identifier(result)
+
+    async def update_contact(
+        self,
+        contact_id: int,
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
         """Update an existing contact."""
-        return await self._make_request("PUT", f"contacts/{contact_id}", data=kwargs)
-    
+        payload = self._merge_payload(data, **kwargs)
+        return await self.request("PUT", f"contacts/{contact_id}", data=payload)
+
     async def delete_contact(self, contact_id: int) -> Dict[str, Any]:
         """Delete a contact."""
-        return await self._make_request("DELETE", f"contacts/{contact_id}")
+        return await self.request("DELETE", f"contacts/{contact_id}")
     
     # ============================================================================
     # RAW API CALL
@@ -463,4 +496,4 @@ class DolibarrClient:
         data: Optional[Dict] = None
     ) -> Dict[str, Any]:
         """Make raw API call to any Dolibarr endpoint."""
-        return await self._make_request(method, endpoint, params=params, data=data)
+        return await self.request(method, endpoint, params=params, data=data)
