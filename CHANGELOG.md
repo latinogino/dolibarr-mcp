@@ -28,6 +28,19 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and adopts th
 - Rewrote the README to highlight the streamlined structure and provide concise installation/run instructions.
 - Clarified that `dolibarr_mcp_server.py` is the definitive MCP entry point.
 
+## [Unreleased]
+
+## [1.1.0] - 2024-05-22
+
+### Removed
+- Legacy helper scripts, installers and manual test programs that duplicated the automated test-suite
+- Alternative server implementations (`simple_client`, `standalone_server`, `ultra_simple_server`) in favour of the single `dolibarr_mcp_server`
+- Redundant documentation fragments and variant requirements files that no longer reflected the current project layout
+
+### Changed
+- Rewrote the README to highlight the streamlined structure and provide concise installation/run instructions
+- Clarified that `dolibarr_mcp_server.py` is the definitive MCP entry point
+
 ## [1.0.0] - 2024-01-26
 
 ### 🎯 Major Restructuring
