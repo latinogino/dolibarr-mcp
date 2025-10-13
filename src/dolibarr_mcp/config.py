@@ -43,7 +43,12 @@ class Config(BaseSettings):
     def validate_dolibarr_url(cls, v: str) -> str:
         """Validate Dolibarr URL."""
         if not v:
-            v = os.getenv("DOLIBARR_URL") or os.getenv("DOLIBARR_BASE_URL", "")
+            v = (
+                os.getenv("DOLIBARR_URL")
+                or os.getenv("DOLIBARR_BASE_URL")
+                or os.getenv("DOLIBARR_SHOP_URL")
+                or ""
+            )
             if not v:
                 # Print warning but don't fail
                 print(
@@ -114,7 +119,12 @@ class Config(BaseSettings):
         """Create configuration from environment variables with validation."""
         try:
             config = cls(
-                dolibarr_url=os.getenv("DOLIBARR_URL") or os.getenv("DOLIBARR_BASE_URL", ""),
+                dolibarr_url=(
+                    os.getenv("DOLIBARR_URL")
+                    or os.getenv("DOLIBARR_BASE_URL")
+                    or os.getenv("DOLIBARR_SHOP_URL")
+                    or ""
+                ),
                 dolibarr_api_key=os.getenv("DOLIBARR_API_KEY", ""),
                 log_level=os.getenv("LOG_LEVEL", "INFO"),
             )

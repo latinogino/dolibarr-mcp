@@ -59,13 +59,13 @@ USER dolibarr
 
 # Health check using test command
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -m dolibarr_mcp.cli test || exit 1
+    CMD python -m dolibarr_mcp.test_connection || exit 1
 
 # Expose port (for future HTTP interface)
 EXPOSE 8080
 
 # Default command runs the MCP server
-CMD ["python", "-m", "dolibarr_mcp"]
+CMD ["python", "-m", "dolibarr_mcp.dolibarr_mcp_server"]
 
 # Labels for metadata
 LABEL org.opencontainers.image.title="Dolibarr MCP Server" \

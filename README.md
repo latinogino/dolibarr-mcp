@@ -1,54 +1,31 @@
 # Dolibarr MCP Server
 
-Dolibarr MCP is a focused Model Context Protocol (MCP) server that exposes the
-most useful Dolibarr ERP/CRM operations to AI copilots. The repository mirrors
-the clean layout used by [`prestashop-mcp`](https://github.com/latinogino/prestashop-mcp):
-a single production-ready server implementation, an async HTTP client, and a
-self-contained documentation bundle.
+Dolibarr MCP delivers a Model Context Protocol (MCP) interface for the Dolibarr
+ERP/CRM. The project mirrors the layout of [`prestashop-mcp`](https://github.com/latinogino/prestashop-mcp):
+an async API client, a production-ready STDIO server, and focused
+documentation. Claude Desktop and other MCP-aware tools can use the server to
+manage customers, products, invoices, orders, and contacts in a Dolibarr
+instance.
 
-
-This MCP server enables complete management of your Dolibarr ERP/CRM through AI
-tools such as Claude Desktop. With specialised tools you can manage customers,
-products, invoices, orders, contacts, and system administration tasks from a
-single MCP endpoint.
-
-This MCP server enables complete management of your Dolibarr ERP/CRM through AI
-tools such as Claude Desktop. With specialised tools you can manage customers,
-products, invoices, orders, contacts, and system administration tasks from a
-single MCP endpoint.
-
-## 📚 Documentation
-
-All user and contributor guides live in [`docs/`](docs/README.md):
-
-- [Quickstart](docs/quickstart.md) – installation and first run instructions for Linux, macOS, and Windows
-- [Configuration](docs/configuration.md) – environment variables and secrets consumed by the server
-- [Development](docs/development.md) – test workflow, linting, and Docker helpers
-- [API Reference](docs/api-reference.md) – Dolibarr REST resources and corresponding MCP tools
+Consult the bundled [documentation index](docs/README.md) for deep dives into
+configuration, API coverage, and contributor workflows.
 
 ## ✨ Features
 
-- **💼 Complete ERP/CRM Management** – Tools for customers, products, invoices, orders, and contacts
-- **⚡ Async/Await Architecture** – Modern, high-performance HTTP client and server
-- **🛡️ Comprehensive Error Handling** – Robust validation and structured responses
-- **🐳 Docker Support** – Optional container workflow for local experimentation and deployment
-- **🔧 Production-Ready** – Automated tests and configuration management powered by `pydantic-settings`
+- **Full ERP coverage** – CRUD tools for users, customers, products, invoices,
+  orders, contacts, and raw API access.
+- **Async/await HTTP client** – Efficient Dolibarr API wrapper with structured
+  error handling.
+- **Ready for MCP hosts** – STDIO transport compatible with Claude Desktop out
+  of the box.
+- **Shared workflow with prestashop-mcp** – Identical developer ergonomics and
+  documentation structure across both repositories.
 
-## 🛠 Available tools
+## ✅ Prerequisites
 
-`dolibarr_mcp_server` registers MCP tools that map to common Dolibarr workflows.
-See the [API reference](docs/api-reference.md) for full details.
-
-- **System** – `test_connection`, `get_status`, and `dolibarr_raw_api`
-- **Users** – CRUD helpers for Dolibarr users
-- **Customers / Third Parties** – CRUD helpers for partners
-- **Products** – CRUD helpers for product catalogue entries
-- **Invoices** – CRUD helpers for invoices
-- **Orders** – CRUD helpers for customer orders
-- **Contacts** – CRUD helpers for contact records
-
-The async implementation in [`dolibarr_client.py`](src/dolibarr_mcp/dolibarr_client.py)
-handles authentication, pagination, and error handling for all endpoints.
+- Python 3.8 or newer.
+- Access to a Dolibarr installation with the REST API enabled and a personal API
+  token.
 
 ## 📦 Installation
 
@@ -57,33 +34,38 @@ handles authentication, pagination, and error handling for all endpoints.
 ```bash
 git clone https://github.com/latinogino/dolibarr-mcp.git
 cd dolibarr-mcp
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv venv_dolibarr
+source venv_dolibarr/bin/activate
 pip install -e .
-```
-
-Install development extras (pytest, formatting, type-checking) when needed:
-
-```bash
+# Optional development extras
 pip install -e '.[dev]'
 ```
 
-### Windows (Visual Studio `vsenv`)
+While the virtual environment is active record the Python executable path with
+`which python`. Claude Desktop must launch the MCP server using this interpreter.
 
-1. Launch the **x64 Native Tools Command Prompt for VS** or **Developer PowerShell for VS** (`vsenv`).
-2. Create a virtual environment next to the repository root: `py -3 -m venv .venv`.
-3. Activate it: `call .venv\\Scripts\\activate.bat` (Command Prompt) or `.\\.venv\\Scripts\\Activate.ps1` (PowerShell).
-4. Install the package: `pip install -e .`.
-5. Install development extras when required: `pip install -e .[dev]` (PowerShell requires escaping brackets: ``pip install -e .`[dev`]``).
-6. Run `where python` **inside** the activated environment and copy the reported path. Claude Desktop must use this exact `python.exe`; mismatched paths (for example, pointing at a non-existent `venv_dolibarr\Scripts\python.exe`) will produce an immediate `ENOENT` error and the server will show as *disconnected*.
+### Windows (PowerShell)
 
-### Docker
+```powershell
+git clone https://github.com/latinogino/dolibarr-mcp.git
+Set-Location dolibarr-mcp
+py -3 -m venv venv_dolibarr
+./venv_dolibarr/Scripts/Activate.ps1
+pip install -e .
+# Optional development extras (escape brackets in PowerShell)
+pip install -e .`[dev`]
+```
+
+Run `Get-Command python` (or `Get-Command python.exe`) while the environment is
+activated and note the absolute path. Claude Desktop should use this interpreter
+inside the virtual environment, for example
+`C:\\path\\to\\dolibarr-mcp\\venv_dolibarr\\Scripts\\python.exe`.
+
+### Docker (optional)
 
 ```bash
-# Using Docker Compose (recommended)
 docker compose up -d
-
-# Or build and run directly
+# or
 docker build -t dolibarr-mcp .
 docker run -d \
   -e DOLIBARR_URL=https://your-dolibarr.example.com/api/index.php \
@@ -93,64 +75,85 @@ docker run -d \
 
 ## ⚙️ Configuration
 
-Set the following environment variables (they may live in a `.env` file):
+### Environment variables
 
-- `DOLIBARR_URL` – Dolibarr API endpoint, e.g. `https://example.com/api/index.php`
-- `DOLIBARR_API_KEY` – personal Dolibarr API token
-- `LOG_LEVEL` – optional logging verbosity (defaults to `INFO`)
+The server reads configuration from the environment or a `.env` file. Both
+`DOLIBARR_URL` and `DOLIBARR_SHOP_URL` are accepted for the base API address.
 
-[`Config`](src/dolibarr_mcp/config.py) is built with `pydantic-settings` and
-supports loading from the environment, `.env` files, and CLI overrides. See the
-[configuration guide](docs/configuration.md) for a full matrix and troubleshooting tips.
+| Variable | Description |
+| --- | --- |
+| `DOLIBARR_URL` / `DOLIBARR_SHOP_URL` | Base Dolibarr API endpoint, e.g. `https://example.com/api/index.php`. Trailing slashes are handled automatically. |
+| `DOLIBARR_API_KEY` | Personal Dolibarr API token. |
+| `LOG_LEVEL` | Optional logging verbosity (`INFO`, `DEBUG`, `WARNING`, …). |
 
-## ▶️ Running the server
+Example `.env`:
 
-Dolibarr MCP communicates with hosts over STDIO. Once configured, launch the
-server with:
-
-```bash
-python -m dolibarr_mcp.cli serve
+```env
+DOLIBARR_URL=https://your-dolibarr.example.com/api/index.php
+DOLIBARR_API_KEY=YOUR_API_KEY
+LOG_LEVEL=INFO
 ```
 
-You can validate credentials and connectivity using the built-in test command
-before wiring it into a host:
+### Claude Desktop configuration
 
-```bash
-python -m dolibarr_mcp.cli test --url https://example.com/api/index.php --api-key YOUR_TOKEN
+Add the following block to `claude_desktop_config.json`, replacing the paths and
+credentials with your own values:
+
+```json
+{
+  "mcpServers": {
+    "dolibarr": {
+      "command": "C:\\path\\to\\dolibarr-mcp\\venv_dolibarr\\Scripts\\python.exe",
+      "args": ["-m", "dolibarr_mcp.dolibarr_mcp_server"],
+      "cwd": "C:\\path\\to\\dolibarr-mcp",
+      "env": {
+        "DOLIBARR_SHOP_URL": "https://your-dolibarr.example.com",
+        "DOLIBARR_API_KEY": "YOUR_API_KEY"
+      }
+    }
+  }
+}
 ```
 
-## 🤖 Using with Claude Desktop
+Restart Claude Desktop after saving the configuration. The MCP server reads the
+same environment variables when launched from Linux or macOS hosts.
 
-Add an entry to `claude_desktop_config.json` that points to your virtual
-environment’s Python executable and the `dolibarr_mcp.cli` module. After
-installation, verify the executable path with `which python` (Linux/macOS) or
-`where python` (Windows `vsenv`). Restart Claude Desktop so it picks up the new
-MCP server.
+## ▶️ Usage
 
-## 🧪 Development workflow
+### Start the MCP server
 
-- Run the test-suite with `pytest` (see [development docs](docs/development.md)
-  for coverage flags and Docker helpers).
+The server communicates over STDIO, so run it in the foreground from the virtual
+environment:
+
+```bash
+python -m dolibarr_mcp.dolibarr_mcp_server
+```
+
+Logs are written to stderr to avoid interfering with the MCP protocol. Keep the
+process running while Claude Desktop is active.
+
+### Test the Dolibarr credentials
+
+Use the standalone connectivity check before wiring the server into an MCP host:
+
+```bash
+python -m dolibarr_mcp.test_connection --url https://your-dolibarr.example.com/api/index.php --api-key YOUR_API_KEY
+```
+
+When the environment variables are already set, omit the overrides and run
+`python -m dolibarr_mcp.test_connection`.
+
+## 🧪 Development
+
+- Run the test-suite with `pytest` (see [`docs/development.md`](docs/development.md)
+  for coverage options and Docker helpers).
 - Editable installs rely on the `src/` layout and expose the `dolibarr-mcp`
-  console entry point.
-- Contributions follow the same structure and documentation conventions as
-  `prestashop-mcp` to keep the twin projects in sync.
-
-```bash
-python -m dolibarr_mcp.cli test --url https://your-dolibarr.example.com/api/index.php --api-key YOUR_KEY
-```
-
-## Available tools
-
-- **System** – `test_connection`, `get_status`
-- **Users** – `get_users`, `get_user_by_id`, `create_user`, `update_user`, `delete_user`
-- **Customers / Third parties** – `get_customers`, `get_customer_by_id`, `create_customer`, `update_customer`, `delete_customer`
-- **Products** – `get_products`, `get_product_by_id`, `create_product`, `update_product`, `delete_product`
-- **Invoices** – `get_invoices`, `get_invoice_by_id`, `create_invoice`, `update_invoice`, `delete_invoice`
-- **Orders** – `get_orders`, `get_order_by_id`, `create_order`, `update_order`, `delete_order`
-- **Contacts** – `get_contacts`, `get_contact_by_id`, `create_contact`, `update_contact`, `delete_contact`
-- **Raw API access** – `dolibarr_raw_api`
+  console entry point for backwards compatibility.
+- The repository structure, tooling, and docs intentionally mirror
+  [`prestashop-mcp`](https://github.com/latinogino/prestashop-mcp) to keep the
+  companion projects aligned.
 
 ## 📄 License
 
-This project is released under the [MIT License](LICENSE).
+Released under the [MIT License](LICENSE).
+

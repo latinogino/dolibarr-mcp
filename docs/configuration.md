@@ -4,11 +4,11 @@ The Dolibarr MCP server reads configuration from environment variables. Use a
 `.env` file during development or configure the variables directly in the MCP
 host application that will launch the server.
 
-| Variable            | Description                                                    |
-| ------------------- | -------------------------------------------------------------- |
-| `DOLIBARR_URL`      | Base API URL, e.g. `https://your-dolibarr.example.com/api/index.php` (legacy configs that still export `DOLIBARR_BASE_URL` are also honoured) |
-| `DOLIBARR_API_KEY`  | Personal Dolibarr API token assigned to your user              |
-| `LOG_LEVEL`         | Optional logging level (`INFO`, `DEBUG`, `WARNING`, …)         |
+| Variable | Description |
+| --- | --- |
+| `DOLIBARR_URL` / `DOLIBARR_SHOP_URL` | Base API URL, e.g. `https://your-dolibarr.example.com/api/index.php` (legacy configs that still export `DOLIBARR_BASE_URL` are also honoured). |
+| `DOLIBARR_API_KEY` | Personal Dolibarr API token assigned to your user. |
+| `LOG_LEVEL` | Optional logging level (`INFO`, `DEBUG`, `WARNING`, …). |
 
 ## Example `.env`
 
@@ -25,9 +25,9 @@ are detected.
 
 ## Testing credentials
 
-Use the CLI helper to verify that the credentials are accepted by Dolibarr
-before wiring the server into your MCP host:
+Use the standalone helper to verify that the credentials are accepted by
+Dolibarr before wiring the server into your MCP host:
 
 ```bash
-python -m dolibarr_mcp.cli test --url https://your-dolibarr.example.com/api/index.php --api-key YOUR_KEY
+python -m dolibarr_mcp.test_connection --url https://your-dolibarr.example.com/api/index.php --api-key YOUR_KEY
 ```

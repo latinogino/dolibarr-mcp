@@ -15,17 +15,15 @@ cd dolibarr-mcp
 ### Linux / macOS
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv venv_dolibarr
+source venv_dolibarr/bin/activate
 ```
 
-### Windows (Visual Studio Developer PowerShell)
+### Windows (PowerShell)
 
 ```powershell
-vsenv
-py -3 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-where python  # copy this path for Claude Desktop
+py -3 -m venv venv_dolibarr
+./venv_dolibarr/Scripts/Activate.ps1
 ```
 
 ## 3. Install the package
@@ -48,17 +46,33 @@ pip install -e .`[dev`]
 
 ## 4. Configure credentials
 
-Create a `.env` file in the project root (see [`configuration.md`](configuration.md))
-or export the variables within your MCP host application.
+Create a `.env` file in the project root (see
+[`configuration.md`](configuration.md)) or export the variables within your MCP
+host application.
 
 ## 5. Run the server
 
 ```bash
-python -m dolibarr_mcp.cli serve
+python -m dolibarr_mcp.dolibarr_mcp_server
 ```
 
 The command starts the STDIO based MCP server that Claude Desktop and other
 clients can communicate with. When wiring the server into Claude Desktop, set
-`command` to the path returned by `where python` (Windows) or `which python`
-(Linux/macOS) while the virtual environment is activated, and use the arguments
-`-m dolibarr_mcp.cli serve`.
+`command` to the path returned by `Get-Command python` (Windows PowerShell) or
+`which python` (Linux/macOS) while the virtual environment is activated, and use
+the arguments `-m dolibarr_mcp.dolibarr_mcp_server`.
+
+## 6. (Optional) Test the connection
+
+Verify the credentials before integrating the server with Claude Desktop:
+
+```bash
+python -m dolibarr_mcp.test_connection
+```
+
+Override the URL or API key directly when needed:
+
+```bash
+python -m dolibarr_mcp.test_connection --url https://your-dolibarr.example.com/api/index.php --api-key YOUR_API_KEY
+```
+
