@@ -405,6 +405,15 @@ class DolibarrClient:
         if "customer_id" in payload and "socid" not in payload:
             payload["socid"] = payload.pop("customer_id")
 
+        # Fix: Map product_id to fk_product in lines
+        if "lines" in payload and isinstance(payload["lines"], list):
+            for line in payload["lines"]:
+                if "product_id" in line:
+                    line["fk_product"] = line.pop("product_id")
+                # Ensure product_type is passed if present (0=Product, 1=Service)
+                if "product_type" in line:
+                    line["product_type"] = line["product_type"]
+
         result = await self.request("POST", "invoices", data=payload)
         return self._extract_identifier(result)
 

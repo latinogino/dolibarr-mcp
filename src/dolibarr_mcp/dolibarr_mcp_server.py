@@ -364,7 +364,9 @@ async def handle_list_tools():
                                 "subprice": {"type": "number", "description": "Unit price"},
                                 "total_ht": {"type": "number", "description": "Total excluding tax"},
                                 "total_ttc": {"type": "number", "description": "Total including tax"},
-                                "vat": {"type": "number", "description": "VAT rate"}
+                                "vat": {"type": "number", "description": "VAT rate"},
+                                "product_id": {"type": "integer", "description": "Product ID to link (optional)"},
+                                "product_type": {"type": "integer", "description": "Type of line (0=Product, 1=Service)"}
                             },
                             "required": ["desc", "qty", "subprice"]
                         }

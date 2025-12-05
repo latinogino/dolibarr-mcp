@@ -140,6 +140,52 @@ class TestCRUDOperations:
             mock_request.return_value = {"success": True}
             result = await client.delete_invoice(100)
             assert result["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_invoice_creation_with_product_lines(self, client):
+        """Test invoice creation with linked product lines."""
+        with patch.object(client, 'request') as mock_request:
+            mock_request.return_value = {"id": 101}
+            
+            # Create invoice with product link and service type
+            await client.create_invoice({
+                "socid": 1,
+                "lines": [
+                    {
+                        "desc": "Linked Product", 
+                        "qty": 1, 
+                        "subprice": 50, 
+                        "product_id": 10,
+                        "product_type": 0
+                    },
+                    {
+                        "desc": "Service Line", 
+                        "qty": 2, 
+                        "subprice": 100,
+                        "product_type": 1
+                    }
+                ]
+            })
+            
+            # Verify payload transformation
+            call_args = mock_request.call_args
+            assert call_args is not None
+            method, endpoint = call_args[0]
+            kwargs = call_args[1]
+            
+            assert method == "POST"
+            assert endpoint == "invoices"
+            
+            payload = kwargs["data"]
+            lines = payload["lines"]
+            
+            # Check first line (Product)
+            assert lines[0]["fk_product"] == 10
+            assert "product_id" not in lines[0]
+            assert lines[0]["product_type"] == 0
+            
+            # Check second line (Service)
+            assert lines[1]["product_type"] == 1
     
     # Order CRUD Tests
     
