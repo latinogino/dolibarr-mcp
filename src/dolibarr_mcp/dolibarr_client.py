@@ -511,6 +511,43 @@ class DolibarrClient:
         return await self.request("DELETE", f"contacts/{contact_id}")
     
     # ============================================================================
+    # PROJECT MANAGEMENT
+    # ============================================================================
+    
+    async def get_projects(self, limit: int = 100, page: int = 1, status: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get list of projects."""
+        params: Dict[str, Any] = {"limit": limit, "page": page}
+        if status is not None:
+            params["status"] = status
+        result = await self.request("GET", "projects", params=params)
+        return result if isinstance(result, list) else []
+
+    async def get_project_by_id(self, project_id: int) -> Dict[str, Any]:
+        """Get specific project by ID."""
+        return await self.request("GET", f"projects/{project_id}")
+
+    async def search_projects(self, sqlfilters: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """Search projects using SQL filters."""
+        params = {"limit": limit, "sqlfilters": sqlfilters}
+        result = await self.request("GET", "projects", params=params)
+        return result if isinstance(result, list) else []
+
+    async def create_project(self, data: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
+        """Create a new project."""
+        payload = self._merge_payload(data, **kwargs)
+        result = await self.request("POST", "projects", data=payload)
+        return self._extract_identifier(result)
+
+    async def update_project(self, project_id: int, data: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
+        """Update an existing project."""
+        payload = self._merge_payload(data, **kwargs)
+        return await self.request("PUT", f"projects/{project_id}", data=payload)
+
+    async def delete_project(self, project_id: int) -> Dict[str, Any]:
+        """Delete a project."""
+        return await self.request("DELETE", f"projects/{project_id}")
+
+    # ============================================================================
     # RAW API CALL
     # ============================================================================
     

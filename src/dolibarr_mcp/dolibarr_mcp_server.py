@@ -535,6 +535,89 @@ async def handle_list_tools():
                 "additionalProperties": False
             }
         ),
+
+        # Project Management CRUD
+        Tool(
+            name="get_projects",
+            description="Get list of projects from Dolibarr",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Maximum number of projects to return (default: 100)", "default": 100},
+                    "page": {"type": "integer", "description": "Page number for pagination (default: 1)", "default": 1},
+                    "status": {"type": "integer", "description": "Project status filter (e.g. 0=draft, 1=open, 2=closed)", "default": 1}
+                },
+                "additionalProperties": False
+            }
+        ),
+        Tool(
+            name="get_project_by_id",
+            description="Get specific project details by ID",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "integer", "description": "Project ID to retrieve"}
+                },
+                "required": ["project_id"],
+                "additionalProperties": False
+            }
+        ),
+        Tool(
+            name="search_projects",
+            description="Search projects by reference or title",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search term for project ref or title"},
+                    "limit": {"type": "integer", "description": "Maximum number of results", "default": 20}
+                },
+                "required": ["query"],
+                "additionalProperties": False
+            }
+        ),
+        Tool(
+            name="create_project",
+            description="Create a new project",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ref": {"type": "string", "description": "Project reference (optional, if Dolibarr auto-generates)"},
+                    "title": {"type": "string", "description": "Project title"},
+                    "description": {"type": "string", "description": "Project description"},
+                    "socid": {"type": "integer", "description": "Linked customer ID (thirdparty)"},
+                    "status": {"type": "integer", "description": "Project status (e.g. 1=open)", "default": 1}
+                },
+                "required": ["title"],
+                "additionalProperties": False
+            }
+        ),
+        Tool(
+            name="update_project",
+            description="Update an existing project",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "integer", "description": "Project ID to update"},
+                    "title": {"type": "string", "description": "Project title"},
+                    "description": {"type": "string", "description": "Project description"},
+                    "status": {"type": "integer", "description": "Project status"}
+                },
+                "required": ["project_id"],
+                "additionalProperties": False
+            }
+        ),
+        Tool(
+            name="delete_project",
+            description="Delete a project",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "integer", "description": "Project ID to delete"}
+                },
+                "required": ["project_id"],
+                "additionalProperties": False
+            }
+        ),
         
         # Raw API Access
         Tool(
@@ -725,6 +808,33 @@ async def handle_call_tool(name: str, arguments: dict):
             elif name == "delete_contact":
                 result = await client.delete_contact(arguments['contact_id'])
             
+            # Project Management
+            elif name == "get_projects":
+                result = await client.get_projects(
+                    limit=arguments.get("limit", 100),
+                    page=arguments.get("page", 1),
+                    status=arguments.get("status")
+                )
+
+            elif name == "get_project_by_id":
+                result = await client.get_project_by_id(arguments["project_id"])
+
+            elif name == "search_projects":
+                query = _escape_sqlfilter(arguments["query"])
+                limit = arguments.get("limit", 20)
+                sqlfilters = f"((t.ref:like:'%{query}%') OR (t.title:like:'%{query}%'))"
+                result = await client.search_projects(sqlfilters=sqlfilters, limit=limit)
+
+            elif name == "create_project":
+                result = await client.create_project(**arguments)
+
+            elif name == "update_project":
+                project_id = arguments.pop("project_id")
+                result = await client.update_project(project_id, **arguments)
+
+            elif name == "delete_project":
+                result = await client.delete_project(arguments["project_id"])
+
             # Raw API Access
             elif name == "dolibarr_raw_api":
                 result = await client.dolibarr_raw_api(**arguments)
