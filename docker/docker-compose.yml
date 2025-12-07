@@ -1,10 +1,8 @@
-version: '3.8'
-
 services:
   dolibarr-mcp:
-    build: 
-      context: .
-      dockerfile: Dockerfile
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     image: dolibarr-mcp:latest
     container_name: dolibarr-mcp-server
     restart: unless-stopped
@@ -23,7 +21,7 @@ services:
     
     volumes:
       # Mount configuration if needed
-      - ./.env:/app/.env:ro
+      - ../.env:/app/.env:ro
       
       # Optional: Mount for custom configurations or plugins
       # - ./config:/app/config:ro
@@ -63,9 +61,9 @@ services:
 
   # Optional: Include a test service
   dolibarr-mcp-test:
-    build: 
-      context: .
-      dockerfile: Dockerfile
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     image: dolibarr-mcp:latest
     container_name: dolibarr-mcp-test
     environment:
@@ -73,8 +71,8 @@ services:
       - DOLIBARR_API_KEY=${DOLIBARR_API_KEY}
       - LOG_LEVEL=DEBUG
     volumes:
-      - ./.env:/app/.env:ro
-      - ./test_dolibarr_mcp.py:/app/test_dolibarr_mcp.py:ro
+      - ../.env:/app/.env:ro
+      - ../test_dolibarr_mcp.py:/app/test_dolibarr_mcp.py:ro
     command: python /app/test_dolibarr_mcp.py
     profiles:
       - test
