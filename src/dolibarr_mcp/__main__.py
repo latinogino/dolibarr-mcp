@@ -10,6 +10,7 @@ if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
 from dolibarr_mcp.dolibarr_mcp_server import main
+import asyncio
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

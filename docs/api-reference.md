@@ -21,11 +21,13 @@ implements for PrestaShop.
 | Resource        | Endpoint(s)                 | Tool group                              |
 | --------------- | --------------------------- | --------------------------------------- |
 | Status          | `GET /status`               | `get_status`, `test_connection`         |
+| Search          | `/products`, `/thirdparties`| `search_products_by_ref`, `search_customers`, `resolve_product_ref` |
 | Users           | `/users`                    | CRUD helpers under the *Users* group    |
 | Third parties   | `/thirdparties`             | Customer CRUD operations                |
 | Products        | `/products`                 | Product CRUD operations                 |
 | Invoices        | `/invoices`                 | Invoice CRUD operations                 |
 | Orders          | `/orders`                   | Order CRUD operations                   |
+| Projects        | `/projects`                 | Project CRUD operations & Search        |
 | Contacts        | `/contacts`                 | Contact CRUD operations                 |
 | Raw passthrough | Any relative path           | `dolibarr_raw_api` tool for quick tests |
 

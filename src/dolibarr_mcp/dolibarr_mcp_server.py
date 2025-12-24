@@ -29,6 +29,11 @@ logging.basicConfig(
 server = Server("dolibarr-mcp")
 
 
+def _escape_sqlfilter(value: str) -> str:
+    """Escape single quotes for SQL filters."""
+    return value.replace("'", "''")
+
+
 @server.list_tools()
 async def handle_list_tools():
     """List all available tools."""
@@ -37,38 +42,146 @@ async def handle_list_tools():
         Tool(
             name="test_connection",
             description="Test Dolibarr API connection",
-            inputSchema={"type": "object", "properties": {}, "additionalProperties": False}
+            inputSchema={"type": "object", "properties": {}, "additionalProperties": False},
         ),
         Tool(
             name="get_status",
             description="Get Dolibarr system status and version information",
-            inputSchema={"type": "object", "properties": {}, "additionalProperties": False}
+            inputSchema={"type": "object", "properties": {}, "additionalProperties": False},
         ),
-        
+
+        # Search Tools
+        Tool(
+            name="search_products_by_ref",
+            description=(
+                "Search products by (partial) reference. Use this when a product reference appears in the text "
+                "but may be incomplete or slightly uncertain. This tool returns a small, filtered list and should "
+                "be preferred over get_products for any kind of lookup by reference."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ref_prefix": {
+                        "type": "string",
+                        "description": "Prefix of the product reference",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results",
+                        "default": 20,
+                    },
+                },
+                "required": ["ref_prefix"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="search_customers",
+            description=(
+                "Search customers/third parties by name or alias. Use this whenever you need to find a customer "
+                "from a name in text instead of loading a full list. Pay attention to legal suffixes and exact matches "
+                "(e.g. 'GmbH' vs 'OG', 'Inc', etc.). Do not use get_customers for name-based search."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search term for name or alias",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results",
+                        "default": 20,
+                    },
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="search_products_by_label",
+            description=(
+                "Search products by label/description text. Use this when you only know the human-readable product "
+                "name or part of it. Prefer this over get_products for any label-based lookup to keep result sets small."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "label_search": {
+                        "type": "string",
+                        "description": "Search term in product label",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results",
+                        "default": 20,
+                    },
+                },
+                "required": ["label_search"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="resolve_product_ref",
+            description=(
+                "Resolve an exact product reference (ref) to a single product. Use this only when the exact reference "
+                "string is known and you need a deterministic mapping to a product ID before creating orders or invoices. "
+                "Returns a structured result with status 'ok', 'not_found', or 'ambiguous'. Do not use this for fuzzy search."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ref": {"type": "string", "description": "Exact product reference"}
+                },
+                "required": ["ref"],
+                "additionalProperties": False,
+            },
+        ),
+
         # User Management CRUD
         Tool(
             name="get_users",
-            description="Get list of users from Dolibarr",
+            description=(
+                "Get an unfiltered paginated list of users from Dolibarr. "
+                "Use this only when you explicitly need a page of users for inspection or debugging. "
+                "Do not use this tool to search by name, login or email (there is no server-side filter here)."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "limit": {"type": "integer", "description": "Maximum number of users to return (default: 100)", "default": 100},
-                    "page": {"type": "integer", "description": "Page number for pagination (default: 1)", "default": 1}
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of users to return (default: 100)",
+                        "default": 100,
+                    },
+                    "page": {
+                        "type": "integer",
+                        "description": "Page number for pagination (default: 1)",
+                        "default": 1,
+                    },
                 },
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="get_user_by_id",
-            description="Get specific user details by ID",
+            description=(
+                "Get the details of exactly one user by numeric ID. "
+                "Use this only when you already know the internal Dolibarr user_id. "
+                "Do not pass login, email or name here."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "user_id": {"type": "integer", "description": "User ID to retrieve"}
+                    "user_id": {
+                        "type": "integer",
+                        "description": "Exact numeric Dolibarr user ID (not login, not email).",
+                    }
                 },
                 "required": ["user_id"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="create_user",
@@ -81,11 +194,15 @@ async def handle_list_tools():
                     "firstname": {"type": "string", "description": "First name"},
                     "email": {"type": "string", "description": "Email address"},
                     "password": {"type": "string", "description": "Password"},
-                    "admin": {"type": "integer", "description": "Admin level (0=No, 1=Yes)", "default": 0}
+                    "admin": {
+                        "type": "integer",
+                        "description": "Admin level (0=No, 1=Yes)",
+                        "default": 0,
+                    },
                 },
                 "required": ["login", "lastname"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="update_user",
@@ -98,11 +215,14 @@ async def handle_list_tools():
                     "lastname": {"type": "string", "description": "Last name"},
                     "firstname": {"type": "string", "description": "First name"},
                     "email": {"type": "string", "description": "Email address"},
-                    "admin": {"type": "integer", "description": "Admin level (0=No, 1=Yes)"}
+                    "admin": {
+                        "type": "integer",
+                        "description": "Admin level (0=No, 1=Yes)",
+                    },
                 },
                 "required": ["user_id"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="delete_user",
@@ -113,34 +233,53 @@ async def handle_list_tools():
                     "user_id": {"type": "integer", "description": "User ID to delete"}
                 },
                 "required": ["user_id"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
-        
+
         # Customer/Third Party Management CRUD
         Tool(
             name="get_customers",
-            description="Get list of customers/third parties from Dolibarr",
+            description=(
+                "Get an unfiltered paginated list of customers/third parties from Dolibarr. "
+                "Intended for debugging or browsing only. DO NOT use this tool to search by name or alias "
+                "(use the dedicated search_* tools such as search_customers instead)."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "limit": {"type": "integer", "description": "Maximum number of customers to return (default: 100)", "default": 100},
-                    "page": {"type": "integer", "description": "Page number for pagination (default: 1)", "default": 1}
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of customers to return (default: 100)",
+                        "default": 100,
+                    },
+                    "page": {
+                        "type": "integer",
+                        "description": "Page number for pagination (default: 1)",
+                        "default": 1,
+                    },
                 },
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="get_customer_by_id",
-            description="Get specific customer details by ID",
+            description=(
+                "Get the details of exactly one customer by numeric ID. "
+                "Use this only when you already know the internal Dolibarr customer_id. "
+                "Do not pass name or email here."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "customer_id": {"type": "integer", "description": "Customer ID to retrieve"}
+                    "customer_id": {
+                        "type": "integer",
+                        "description": "Exact numeric Dolibarr customer ID (not name).",
+                    }
                 },
                 "required": ["customer_id"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="create_customer",
@@ -154,13 +293,25 @@ async def handle_list_tools():
                     "address": {"type": "string", "description": "Customer address"},
                     "town": {"type": "string", "description": "City/Town"},
                     "zip": {"type": "string", "description": "Postal code"},
-                    "country_id": {"type": "integer", "description": "Country ID (default: 1)", "default": 1},
-                    "type": {"type": "integer", "description": "Customer type (1=Customer, 2=Supplier, 3=Both)", "default": 1},
-                    "status": {"type": "integer", "description": "Status (1=Active, 0=Inactive)", "default": 1}
+                    "country_id": {
+                        "type": "integer",
+                        "description": "Country ID (default: 1)",
+                        "default": 1,
+                    },
+                    "type": {
+                        "type": "integer",
+                        "description": "Customer type (1=Customer, 2=Supplier, 3=Both)",
+                        "default": 1,
+                    },
+                    "status": {
+                        "type": "integer",
+                        "description": "Status (1=Active, 0=Inactive)",
+                        "default": 1,
+                    },
                 },
                 "required": ["name"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="update_customer",
@@ -168,18 +319,24 @@ async def handle_list_tools():
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "customer_id": {"type": "integer", "description": "Customer ID to update"},
+                    "customer_id": {
+                        "type": "integer",
+                        "description": "Customer ID to update",
+                    },
                     "name": {"type": "string", "description": "Customer name"},
                     "email": {"type": "string", "description": "Email address"},
                     "phone": {"type": "string", "description": "Phone number"},
                     "address": {"type": "string", "description": "Customer address"},
                     "town": {"type": "string", "description": "City/Town"},
                     "zip": {"type": "string", "description": "Postal code"},
-                    "status": {"type": "integer", "description": "Status (1=Active, 0=Inactive)"}
+                    "status": {
+                        "type": "integer",
+                        "description": "Status (1=Active, 0=Inactive)",
+                    },
                 },
                 "required": ["customer_id"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="delete_customer",
@@ -187,36 +344,54 @@ async def handle_list_tools():
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "customer_id": {"type": "integer", "description": "Customer ID to delete"}
+                    "customer_id": {
+                        "type": "integer",
+                        "description": "Customer ID to delete",
+                    }
                 },
                 "required": ["customer_id"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
-        
+
         # Product Management CRUD
         Tool(
             name="get_products",
-            description="Get list of products from Dolibarr",
+            description=(
+                "Get an unfiltered list of products from Dolibarr. "
+                "Intended for debugging or bulk inspection only. DO NOT use this tool to search by reference or label "
+                "(use search_products_by_ref or search_products_by_label instead)."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "limit": {"type": "integer", "description": "Maximum number of products to return (default: 100)", "default": 100}
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of products to return (default: 100)",
+                        "default": 100,
+                    }
                 },
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="get_product_by_id",
-            description="Get specific product details by ID",
+            description=(
+                "Get the details of exactly one product by numeric ID. "
+                "Use this only when you already know the internal Dolibarr product_id. "
+                "Do not pass reference or label here."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "product_id": {"type": "integer", "description": "Product ID to retrieve"}
+                    "product_id": {
+                        "type": "integer",
+                        "description": "Exact numeric Dolibarr product ID (not ref).",
+                    }
                 },
                 "required": ["product_id"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="create_product",
@@ -227,11 +402,14 @@ async def handle_list_tools():
                     "label": {"type": "string", "description": "Product name/label"},
                     "price": {"type": "number", "description": "Product price"},
                     "description": {"type": "string", "description": "Product description"},
-                    "stock": {"type": "integer", "description": "Initial stock quantity"}
+                    "stock": {
+                        "type": "integer",
+                        "description": "Initial stock quantity",
+                    },
                 },
                 "required": ["label", "price"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="update_product",
@@ -239,14 +417,20 @@ async def handle_list_tools():
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "product_id": {"type": "integer", "description": "Product ID to update"},
+                    "product_id": {
+                        "type": "integer",
+                        "description": "Product ID to update",
+                    },
                     "label": {"type": "string", "description": "Product name/label"},
                     "price": {"type": "number", "description": "Product price"},
-                    "description": {"type": "string", "description": "Product description"}
+                    "description": {
+                        "type": "string",
+                        "description": "Product description",
+                    },
                 },
                 "required": ["product_id"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="delete_product",
@@ -254,67 +438,124 @@ async def handle_list_tools():
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "product_id": {"type": "integer", "description": "Product ID to delete"}
+                    "product_id": {
+                        "type": "integer",
+                        "description": "Product ID to delete",
+                    }
                 },
                 "required": ["product_id"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
-        
+
         # Invoice Management CRUD
         Tool(
             name="get_invoices",
-            description="Get list of invoices from Dolibarr",
+            description=(
+                "Get a paginated list of invoices from Dolibarr, optionally filtered by status. "
+                "Use this only if you really need a list of many invoices (e.g. overviews, reports). "
+                "Do not use this as a search-by-customer or search-by-reference tool."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "limit": {"type": "integer", "description": "Maximum number of invoices to return (default: 100)", "default": 100},
-                    "status": {"type": "string", "description": "Invoice status filter (draft, unpaid, paid, etc.)"}
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of invoices to return (default: 100)",
+                        "default": 100,
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "Invoice status filter (draft, unpaid, paid, etc.)",
+                    },
                 },
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="get_invoice_by_id",
-            description="Get specific invoice details by ID",
+            description=(
+                "Get the details of exactly one invoice by numeric ID. "
+                "Use this only when you already know the internal Dolibarr invoice_id. "
+                "Do not pass invoice reference here."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "invoice_id": {"type": "integer", "description": "Invoice ID to retrieve"}
+                    "invoice_id": {
+                        "type": "integer",
+                        "description": "Exact numeric Dolibarr invoice ID.",
+                    }
                 },
                 "required": ["invoice_id"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="create_invoice",
-            description="Create a new invoice",
+            description=(
+                "ALWAYS creates a new invoice. Do not use this tool to modify an existing invoice. "
+                "Before calling this, resolve the correct customer and product IDs using the appropriate search_* tools "
+                "(e.g. search_customers, search_products_by_ref, resolve_product_ref). "
+                "For lines: Use product_id for existing products whenever possible and set product_type=0 for goods "
+                "and product_type=1 for services. Use free-text lines only if no matching product exists in Dolibarr."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "customer_id": {"type": "integer", "description": "Customer ID (socid)"},
-                    "date": {"type": "string", "description": "Invoice date (YYYY-MM-DD)"},
-                    "due_date": {"type": "string", "description": "Due date (YYYY-MM-DD)"},
+                    "customer_id": {
+                        "type": "integer",
+                        "description": "Customer ID (Dolibarr socid of the third party to invoice)",
+                    },
+                    "date": {
+                        "type": "string",
+                        "description": "Invoice date (YYYY-MM-DD)",
+                    },
+                    "due_date": {
+                        "type": "string",
+                        "description": "Due date (YYYY-MM-DD)",
+                    },
                     "lines": {
                         "type": "array",
                         "description": "Invoice lines",
                         "items": {
                             "type": "object",
                             "properties": {
-                                "desc": {"type": "string", "description": "Line description"},
+                                "desc": {
+                                    "type": "string",
+                                    "description": "Line description",
+                                },
                                 "qty": {"type": "number", "description": "Quantity"},
-                                "subprice": {"type": "number", "description": "Unit price"},
-                                "total_ht": {"type": "number", "description": "Total excluding tax"},
-                                "total_ttc": {"type": "number", "description": "Total including tax"},
-                                "vat": {"type": "number", "description": "VAT rate"}
+                                "subprice": {
+                                    "type": "number",
+                                    "description": "Unit price",
+                                },
+                                "total_ht": {
+                                    "type": "number",
+                                    "description": "Total excluding tax",
+                                },
+                                "total_ttc": {
+                                    "type": "number",
+                                    "description": "Total including tax",
+                                },
+                                "vat": {"type": "number", "description": "VAT rate"},
+                                "product_id": {
+                                    "type": "integer",
+                                    "description": "Product ID to link (optional)",
+                                },
+                                "product_type": {
+                                    "type": "integer",
+                                    "description": "Type of line (0=Product, 1=Service)",
+                                },
                             },
-                            "required": ["desc", "qty", "subprice"]
-                        }
-                    }
+                            "required": ["desc", "qty", "subprice"],
+                            "additionalProperties": False,
+                        },
+                    },
                 },
                 "required": ["customer_id", "lines"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="update_invoice",
@@ -322,13 +563,22 @@ async def handle_list_tools():
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "invoice_id": {"type": "integer", "description": "Invoice ID to update"},
-                    "date": {"type": "string", "description": "Invoice date (YYYY-MM-DD)"},
-                    "due_date": {"type": "string", "description": "Due date (YYYY-MM-DD)"}
+                    "invoice_id": {
+                        "type": "integer",
+                        "description": "Invoice ID to update",
+                    },
+                    "date": {
+                        "type": "string",
+                        "description": "Invoice date (YYYY-MM-DD)",
+                    },
+                    "due_date": {
+                        "type": "string",
+                        "description": "Due date (YYYY-MM-DD)",
+                    },
                 },
                 "required": ["invoice_id"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="delete_invoice",
@@ -336,50 +586,241 @@ async def handle_list_tools():
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "invoice_id": {"type": "integer", "description": "Invoice ID to delete"}
+                    "invoice_id": {
+                        "type": "integer",
+                        "description": "Invoice ID to delete",
+                    }
                 },
                 "required": ["invoice_id"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
-        
-        # Order Management CRUD  
+
         Tool(
-            name="get_orders",
-            description="Get list of orders from Dolibarr",
+            name="create_invoice_draft",
+            description=(
+                "Create a new invoice draft (header only). "
+                "Use this to start a new invoice, then use add_invoice_line to add items. "
+                "Returns the new invoice_id."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "limit": {"type": "integer", "description": "Maximum number of orders to return (default: 100)", "default": 100},
-                    "status": {"type": "string", "description": "Order status filter"}
+                    "customer_id": {
+                        "type": "integer",
+                        "description": "Customer ID (Dolibarr socid)",
+                    },
+                    "date": {
+                        "type": "string",
+                        "description": "Invoice date (YYYY-MM-DD)",
+                    },
+                    "project_id": {
+                        "type": "integer",
+                        "description": "Linked project ID (optional)",
+                    },
                 },
-                "additionalProperties": False
-            }
+                "required": ["customer_id", "date"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="add_invoice_line",
+            description="Add a line item to an existing draft invoice.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "invoice_id": {
+                        "type": "integer",
+                        "description": "Invoice ID",
+                    },
+                    "desc": {
+                        "type": "string",
+                        "description": "Line description",
+                    },
+                    "qty": {
+                        "type": "number",
+                        "description": "Quantity",
+                    },
+                    "subprice": {
+                        "type": "number",
+                        "description": "Unit price (net)",
+                    },
+                    "product_id": {
+                        "type": "integer",
+                        "description": "Product ID (optional)",
+                    },
+                    "product_type": {
+                        "type": "integer",
+                        "description": "Type (0=Product, 1=Service)",
+                        "default": 0,
+                    },
+                    "vat": {
+                        "type": "number",
+                        "description": "VAT rate (optional)",
+                    },
+                },
+                "required": ["invoice_id", "desc", "qty", "subprice"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="update_invoice_line",
+            description="Update an existing line in a draft invoice.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "invoice_id": {
+                        "type": "integer",
+                        "description": "Invoice ID",
+                    },
+                    "line_id": {
+                        "type": "integer",
+                        "description": "Line ID to update",
+                    },
+                    "desc": {
+                        "type": "string",
+                        "description": "New description",
+                    },
+                    "qty": {
+                        "type": "number",
+                        "description": "New quantity",
+                    },
+                    "subprice": {
+                        "type": "number",
+                        "description": "New unit price",
+                    },
+                    "vat": {
+                        "type": "number",
+                        "description": "New VAT rate",
+                    },
+                },
+                "required": ["invoice_id", "line_id"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="delete_invoice_line",
+            description="Delete a line from a draft invoice.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "invoice_id": {
+                        "type": "integer",
+                        "description": "Invoice ID",
+                    },
+                    "line_id": {
+                        "type": "integer",
+                        "description": "Line ID to delete",
+                    },
+                },
+                "required": ["invoice_id", "line_id"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="set_invoice_project",
+            description="Link an invoice to a project.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "invoice_id": {
+                        "type": "integer",
+                        "description": "Invoice ID",
+                    },
+                    "project_id": {
+                        "type": "integer",
+                        "description": "Project ID",
+                    },
+                },
+                "required": ["invoice_id", "project_id"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="validate_invoice",
+            description="Validate a draft invoice (change status to unpaid).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "invoice_id": {
+                        "type": "integer",
+                        "description": "Invoice ID",
+                    },
+                    "warehouse_id": {
+                        "type": "integer",
+                        "description": "Warehouse ID for stock decrease (optional)",
+                        "default": 0,
+                    },
+                },
+                "required": ["invoice_id"],
+                "additionalProperties": False,
+            },
+        ),
+
+        # Order Management CRUD
+        Tool(
+            name="get_orders",
+            description=(
+                "Get a paginated list of orders from Dolibarr, optionally filtered by status. "
+                "Use this for overviews or reporting. Not suitable for searching specific orders by customer, project "
+                "or reference (there is no server-side search here)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of orders to return (default: 100)",
+                        "default": 100,
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "Order status filter",
+                    },
+                },
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="get_order_by_id",
-            description="Get specific order details by ID",
+            description=(
+                "Get the details of exactly one order by numeric ID. "
+                "Use this only when you already know the internal Dolibarr order_id. "
+                "Do not pass order reference here."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "order_id": {"type": "integer", "description": "Order ID to retrieve"}
+                    "order_id": {
+                        "type": "integer",
+                        "description": "Exact numeric Dolibarr order ID.",
+                    }
                 },
                 "required": ["order_id"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="create_order",
-            description="Create a new order",
+            description=(
+                "Create a new customer order. Use this only when you have already resolved the correct customer "
+                "ID (socid) using search_customers or related tools. This tool does not update existing orders."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "customer_id": {"type": "integer", "description": "Customer ID (socid)"},
-                    "date": {"type": "string", "description": "Order date (YYYY-MM-DD)"}
+                    "customer_id": {
+                        "type": "integer",
+                        "description": "Customer ID (socid)",
+                    },
+                    "date": {
+                        "type": "string",
+                        "description": "Order date (YYYY-MM-DD)",
+                    },
                 },
                 "required": ["customer_id"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="update_order",
@@ -387,12 +828,18 @@ async def handle_list_tools():
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "order_id": {"type": "integer", "description": "Order ID to update"},
-                    "date": {"type": "string", "description": "Order date (YYYY-MM-DD)"}
+                    "order_id": {
+                        "type": "integer",
+                        "description": "Order ID to update",
+                    },
+                    "date": {
+                        "type": "string",
+                        "description": "Order date (YYYY-MM-DD)",
+                    },
                 },
                 "required": ["order_id"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="delete_order",
@@ -400,36 +847,54 @@ async def handle_list_tools():
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "order_id": {"type": "integer", "description": "Order ID to delete"}
+                    "order_id": {
+                        "type": "integer",
+                        "description": "Order ID to delete",
+                    }
                 },
                 "required": ["order_id"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
-        
+
         # Contact Management CRUD
         Tool(
             name="get_contacts",
-            description="Get list of contacts from Dolibarr",
+            description=(
+                "Get a paginated list of contacts from Dolibarr. "
+                "Use this only if you need a generic list of contacts. "
+                "Do not treat this as a name search; if you need search-by-name, a dedicated search tool should be used."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "limit": {"type": "integer", "description": "Maximum number of contacts to return (default: 100)", "default": 100}
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of contacts to return (default: 100)",
+                        "default": 100,
+                    }
                 },
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="get_contact_by_id",
-            description="Get specific contact details by ID",
+            description=(
+                "Get the details of exactly one contact by numeric ID. "
+                "Use this only when you already know the internal Dolibarr contact_id. "
+                "Do not pass name or email here."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "contact_id": {"type": "integer", "description": "Contact ID to retrieve"}
+                    "contact_id": {
+                        "type": "integer",
+                        "description": "Exact numeric Dolibarr contact ID.",
+                    }
                 },
                 "required": ["contact_id"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="create_contact",
@@ -441,11 +906,14 @@ async def handle_list_tools():
                     "lastname": {"type": "string", "description": "Last name"},
                     "email": {"type": "string", "description": "Email address"},
                     "phone": {"type": "string", "description": "Phone number"},
-                    "socid": {"type": "integer", "description": "Associated company ID"}
+                    "socid": {
+                        "type": "integer",
+                        "description": "Associated company ID (thirdparty socid)",
+                    },
                 },
                 "required": ["firstname", "lastname"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="update_contact",
@@ -453,15 +921,18 @@ async def handle_list_tools():
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "contact_id": {"type": "integer", "description": "Contact ID to update"},
+                    "contact_id": {
+                        "type": "integer",
+                        "description": "Contact ID to update",
+                    },
                     "firstname": {"type": "string", "description": "First name"},
                     "lastname": {"type": "string", "description": "Last name"},
                     "email": {"type": "string", "description": "Email address"},
-                    "phone": {"type": "string", "description": "Phone number"}
+                    "phone": {"type": "string", "description": "Phone number"},
                 },
                 "required": ["contact_id"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
         Tool(
             name="delete_contact",
@@ -469,29 +940,191 @@ async def handle_list_tools():
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "contact_id": {"type": "integer", "description": "Contact ID to delete"}
+                    "contact_id": {
+                        "type": "integer",
+                        "description": "Contact ID to delete",
+                    }
                 },
                 "required": ["contact_id"],
-                "additionalProperties": False
-            }
+                "additionalProperties": False,
+            },
         ),
-        
-        # Raw API Access
+
+        # Project Management CRUD
         Tool(
-            name="dolibarr_raw_api",
-            description="Make raw API call to any Dolibarr endpoint",
+            name="get_projects",
+            description=(
+                "Get a paginated list of projects from Dolibarr, optionally filtered by status. "
+                "Use this for overviews or when you need to iterate through project pages. "
+                "Do not use this to search for a project by name or reference (use search_projects instead)."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "method": {"type": "string", "description": "HTTP method", "enum": ["GET", "POST", "PUT", "DELETE"]},
-                    "endpoint": {"type": "string", "description": "API endpoint (e.g., /thirdparties, /invoices)"},
-                    "params": {"type": "object", "description": "Query parameters"},
-                    "data": {"type": "object", "description": "Request payload for POST/PUT requests"}
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of projects to return (default: 100)",
+                        "default": 100,
+                    },
+                    "page": {
+                        "type": "integer",
+                        "description": "Page number for pagination (default: 1)",
+                        "default": 1,
+                    },
+                    "status": {
+                        "type": "integer",
+                        "description": "Project status filter (e.g. 0=draft, 1=open, 2=closed)",
+                        "default": 1,
+                    },
+                },
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="get_project_by_id",
+            description=(
+                "Get the details of exactly one project by numeric ID. "
+                "Use this only when you already know the internal Dolibarr project_id. "
+                "Do not pass project reference here."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {
+                        "type": "integer",
+                        "description": "Exact numeric Dolibarr project ID.",
+                    }
+                },
+                "required": ["project_id"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="search_projects",
+            description=(
+                "Search projects by reference or title. Use this when you have a partial or full project ref/title "
+                "and need to find matching projects without loading full project lists."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search term for project ref or title",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results",
+                        "default": 20,
+                    },
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="create_project",
+            description="Create a new project",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ref": {
+                        "type": "string",
+                        "description": "Project reference (optional, if Dolibarr auto-generates)",
+                    },
+                    "title": {"type": "string", "description": "Project title"},
+                    "description": {
+                        "type": "string",
+                        "description": "Project description",
+                    },
+                    "socid": {
+                        "type": "integer",
+                        "description": "Linked customer ID (thirdparty)",
+                    },
+                    "status": {
+                        "type": "integer",
+                        "description": "Project status (e.g. 1=open)",
+                        "default": 1,
+                    },
+                },
+                "required": ["title"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="update_project",
+            description="Update an existing project",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {
+                        "type": "integer",
+                        "description": "Project ID to update",
+                    },
+                    "title": {"type": "string", "description": "Project title"},
+                    "description": {
+                        "type": "string",
+                        "description": "Project description",
+                    },
+                    "status": {
+                        "type": "integer",
+                        "description": "Project status",
+                    },
+                },
+                "required": ["project_id"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="delete_project",
+            description="Delete a project",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {
+                        "type": "integer",
+                        "description": "Project ID to delete",
+                    }
+                },
+                "required": ["project_id"],
+                "additionalProperties": False,
+            },
+        ),
+
+        # Raw API Access
+        Tool(
+            name="dolibarr_raw_api",
+            description=(
+                "Low-level escape hatch to call any Dolibarr REST endpoint directly. "
+                "Use this ONLY if there is no dedicated high-level tool available for your use case. "
+                "You must pass a valid Dolibarr API path and parameters yourself; the server does not validate them. "
+                "Incorrect usage can cause errors or side effects (such as creating or deleting unexpected data)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "method": {
+                        "type": "string",
+                        "description": "HTTP method",
+                        "enum": ["GET", "POST", "PUT", "DELETE"],
+                    },
+                    "endpoint": {
+                        "type": "string",
+                        "description": "Dolibarr API endpoint path (e.g. '/thirdparties', '/invoices/123'). Must be a valid existing endpoint.",
+                    },
+                    "params": {
+                        "type": "object",
+                        "description": "Query parameters",
+                    },
+                    "data": {
+                        "type": "object",
+                        "description": "Request payload for POST/PUT requests",
+                    },
                 },
                 "required": ["method", "endpoint"],
-                "additionalProperties": False
-            }
-        )
+                "additionalProperties": False,
+            },
+        ),
     ]
 
 
@@ -514,6 +1147,43 @@ async def handle_call_tool(name: str, arguments: dict):
             elif name == "get_status":
                 result = await client.get_status()
             
+            # Search Tools
+            elif name == "search_products_by_ref":
+                ref_prefix = _escape_sqlfilter(arguments['ref_prefix'])
+                limit = arguments.get('limit', 20)
+                sqlfilters = f"(t.ref:like:'{ref_prefix}%')"
+                result = await client.search_products(sqlfilters=sqlfilters, limit=limit)
+
+            elif name == "search_customers":
+                query = _escape_sqlfilter(arguments['query'])
+                limit = arguments.get('limit', 20)
+                sqlfilters = f"((t.nom:like:'%{query}%') OR (t.name_alias:like:'%{query}%'))"
+                result = await client.search_customers(sqlfilters=sqlfilters, limit=limit)
+
+            elif name == "search_products_by_label":
+                label_search = _escape_sqlfilter(arguments['label_search'])
+                limit = arguments.get('limit', 20)
+                sqlfilters = f"(t.label:like:'%{label_search}%')"
+                result = await client.search_products(sqlfilters=sqlfilters, limit=limit)
+
+            elif name == "resolve_product_ref":
+                ref = arguments['ref']
+                ref_esc = _escape_sqlfilter(ref)
+                sqlfilters = f"(t.ref:like:'{ref_esc}')"
+                products = await client.search_products(sqlfilters=sqlfilters, limit=2)
+                
+                if not products:
+                    result = {"status": "not_found", "message": f"Product with ref '{ref}' not found"}
+                elif len(products) == 1:
+                    result = {"status": "ok", "product": products[0]}
+                else:
+                    # Check if one is exact match
+                    exact_matches = [p for p in products if p.get('ref') == ref]
+                    if len(exact_matches) == 1:
+                        result = {"status": "ok", "product": exact_matches[0]}
+                    else:
+                        result = {"status": "ambiguous", "message": f"Multiple products found for ref '{ref}'", "products": products}
+
             # User Management
             elif name == "get_users":
                 result = await client.get_users(
@@ -590,6 +1260,40 @@ async def handle_call_tool(name: str, arguments: dict):
             
             elif name == "delete_invoice":
                 result = await client.delete_invoice(arguments['invoice_id'])
+
+            elif name == "create_invoice_draft":
+                # Map customer_id to socid for the API
+                if "customer_id" in arguments:
+                    arguments["socid"] = arguments.pop("customer_id")
+                
+                # Map project_id to fk_project if present
+                if "project_id" in arguments:
+                    arguments["fk_project"] = arguments.pop("project_id")
+                
+                result = await client.create_invoice(**arguments)
+
+            elif name == "add_invoice_line":
+                invoice_id = arguments.pop("invoice_id")
+                result = await client.add_invoice_line(invoice_id, **arguments)
+
+            elif name == "update_invoice_line":
+                invoice_id = arguments.pop("invoice_id")
+                line_id = arguments.pop("line_id")
+                result = await client.update_invoice_line(invoice_id, line_id, **arguments)
+
+            elif name == "delete_invoice_line":
+                invoice_id = arguments.pop("invoice_id")
+                line_id = arguments.pop("line_id")
+                result = await client.delete_invoice_line(invoice_id, line_id)
+
+            elif name == "set_invoice_project":
+                invoice_id = arguments.pop("invoice_id")
+                project_id = arguments.pop("project_id")
+                result = await client.update_invoice(invoice_id, fk_project=project_id)
+
+            elif name == "validate_invoice":
+                invoice_id = arguments.pop("invoice_id")
+                result = await client.validate_invoice(invoice_id, **arguments)
             
             # Order Management
             elif name == "get_orders":
@@ -628,6 +1332,33 @@ async def handle_call_tool(name: str, arguments: dict):
             elif name == "delete_contact":
                 result = await client.delete_contact(arguments['contact_id'])
             
+            # Project Management
+            elif name == "get_projects":
+                result = await client.get_projects(
+                    limit=arguments.get("limit", 100),
+                    page=arguments.get("page", 1),
+                    status=arguments.get("status")
+                )
+
+            elif name == "get_project_by_id":
+                result = await client.get_project_by_id(arguments["project_id"])
+
+            elif name == "search_projects":
+                query = _escape_sqlfilter(arguments["query"])
+                limit = arguments.get("limit", 20)
+                sqlfilters = f"((t.ref:like:'%{query}%') OR (t.title:like:'%{query}%'))"
+                result = await client.search_projects(sqlfilters=sqlfilters, limit=limit)
+
+            elif name == "create_project":
+                result = await client.create_project(**arguments)
+
+            elif name == "update_project":
+                project_id = arguments.pop("project_id")
+                result = await client.update_project(project_id, **arguments)
+
+            elif name == "delete_project":
+                result = await client.delete_project(arguments["project_id"])
+
             # Raw API Access
             elif name == "dolibarr_raw_api":
                 result = await client.dolibarr_raw_api(**arguments)

@@ -1,9 +1,13 @@
 # Dolibarr MCP Server
 
 Dolibarr MCP delivers a Model Context Protocol (MCP) interface for the Dolibarr
-ERP/CRM. The project mirrors the layout of [`prestashop-mcp`](https://github.com/latinogino/prestashop-mcp):
+ERP/CRM. The project mirrors the project structure of [`prestashop-mcp`](https://github.com/latinogino/prestashop-mcp):
 an async API client, a production-ready STDIO server, and focused
-documentation. Claude Desktop and other MCP-aware tools can use the server to
+documentation.
+
+**Design Note:** While sharing the same architecture, this server implements **specialized search tools** (e.g., `search_products_by_ref`, `resolve_product_ref`) instead of a single unified `get_` tool. This design choice ensures efficient server-side filtering via Dolibarr's SQL API, preventing the agent from accidentally loading thousands of records and exceeding context limits.
+
+Claude Desktop and other MCP-aware tools can use the server to
 manage customers, products, invoices, orders, and contacts in a Dolibarr
 instance.
 
@@ -13,7 +17,8 @@ configuration, API coverage, and contributor workflows.
 ## ✨ Features
 
 - **Full ERP coverage** – CRUD tools for users, customers, products, invoices,
-  orders, contacts, and raw API access.
+  orders, contacts, projects, and raw API access.
+- **Advanced Search** – Server-side filtering for products, customers, and projects to minimize token usage and costs.
 - **Async/await HTTP client** – Efficient Dolibarr API wrapper with structured
   error handling.
 - **Ready for MCP hosts** – STDIO transport compatible with Claude Desktop out

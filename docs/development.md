@@ -6,17 +6,24 @@ kept separate in `docker/`.
 
 ## Install development dependencies
 
+It is recommended to use a virtual environment to avoid conflicts with system packages (especially on Linux systems with externally managed environments).
+
 ```bash
-pip install -e '.[dev]'
-```
+# Create a virtual environment
+python3 -m venv .venv
 
-### Windows PowerShell
+# Activate the virtual environment
+source .venv/bin/activate  # On Linux/macOS
+# .venv\Scripts\activate   # On Windows
 
-```powershell
-pip install -e .`[dev`]
+# Install dependencies
+pip install -r requirements.txt
+pip install -e .
 ```
 
 ## Run the test suite
+
+Once your virtual environment is active:
 
 ```bash
 pytest
@@ -26,6 +33,12 @@ To gather coverage metrics:
 
 ```bash
 pytest --cov=src/dolibarr_mcp --cov-report=term-missing
+```
+
+If you encounter "command not found" errors, ensure your virtual environment is activated or run via python module:
+
+```bash
+python3 -m pytest
 ```
 
 ## Formatting and linting

@@ -19,7 +19,7 @@ class Config(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         validate_assignment=True,
-        extra="forbid",
+        extra="ignore",
     )
 
     dolibarr_url: str = Field(

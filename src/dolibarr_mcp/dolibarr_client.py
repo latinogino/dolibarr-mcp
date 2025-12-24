@@ -272,6 +272,12 @@ class DolibarrClient:
     # CUSTOMER/THIRD PARTY MANAGEMENT
     # ============================================================================
     
+    async def search_customers(self, sqlfilters: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """Search customers using SQL filters."""
+        params = {"limit": limit, "sqlfilters": sqlfilters}
+        result = await self.request("GET", "thirdparties", params=params)
+        return result if isinstance(result, list) else []
+
     async def get_customers(self, limit: int = 100, page: int = 1) -> List[Dict[str, Any]]:
         """Get list of customers/third parties."""
         params = {"limit": limit}
@@ -330,6 +336,12 @@ class DolibarrClient:
     # PRODUCT MANAGEMENT
     # ============================================================================
     
+    async def search_products(self, sqlfilters: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """Search products using SQL filters."""
+        params = {"limit": limit, "sqlfilters": sqlfilters}
+        result = await self.request("GET", "products", params=params)
+        return result if isinstance(result, list) else []
+
     async def get_products(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get list of products."""
         params = {"limit": limit}
@@ -388,6 +400,20 @@ class DolibarrClient:
     ) -> Dict[str, Any]:
         """Create a new invoice."""
         payload = self._merge_payload(data, **kwargs)
+
+        # Fix: Map customer_id to socid
+        if "customer_id" in payload and "socid" not in payload:
+            payload["socid"] = payload.pop("customer_id")
+
+        # Fix: Map product_id to fk_product in lines
+        if "lines" in payload and isinstance(payload["lines"], list):
+            for line in payload["lines"]:
+                if "product_id" in line:
+                    line["fk_product"] = line.pop("product_id")
+                # Ensure product_type is passed if present (0=Product, 1=Service)
+                if "product_type" in line:
+                    line["product_type"] = line["product_type"]
+
         result = await self.request("POST", "invoices", data=payload)
         return self._extract_identifier(result)
 
@@ -404,6 +430,44 @@ class DolibarrClient:
     async def delete_invoice(self, invoice_id: int) -> Dict[str, Any]:
         """Delete an invoice."""
         return await self.request("DELETE", f"invoices/{invoice_id}")
+
+    async def add_invoice_line(
+        self,
+        invoice_id: int,
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Add a line to an invoice."""
+        payload = self._merge_payload(data, **kwargs)
+        
+        # Map product_id to fk_product if present
+        if "product_id" in payload:
+            payload["fk_product"] = payload.pop("product_id")
+            
+        return await self.request("POST", f"invoices/{invoice_id}/lines", data=payload)
+
+    async def update_invoice_line(
+        self,
+        invoice_id: int,
+        line_id: int,
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Update a line in an invoice."""
+        payload = self._merge_payload(data, **kwargs)
+        return await self.request("PUT", f"invoices/{invoice_id}/lines/{line_id}", data=payload)
+
+    async def delete_invoice_line(self, invoice_id: int, line_id: int) -> Dict[str, Any]:
+        """Delete a line from an invoice."""
+        return await self.request("DELETE", f"invoices/{invoice_id}/lines/{line_id}")
+
+    async def validate_invoice(self, invoice_id: int, warehouse_id: int = 0, not_trigger: int = 0) -> Dict[str, Any]:
+        """Validate an invoice."""
+        payload = {
+            "idwarehouse": warehouse_id,
+            "not_trigger": not_trigger
+        }
+        return await self.request("POST", f"invoices/{invoice_id}/validate", data=payload)
     
     # ============================================================================
     # ORDER MANAGEMENT
@@ -484,6 +548,43 @@ class DolibarrClient:
         """Delete a contact."""
         return await self.request("DELETE", f"contacts/{contact_id}")
     
+    # ============================================================================
+    # PROJECT MANAGEMENT
+    # ============================================================================
+    
+    async def get_projects(self, limit: int = 100, page: int = 1, status: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get list of projects."""
+        params: Dict[str, Any] = {"limit": limit, "page": page}
+        if status is not None:
+            params["status"] = status
+        result = await self.request("GET", "projects", params=params)
+        return result if isinstance(result, list) else []
+
+    async def get_project_by_id(self, project_id: int) -> Dict[str, Any]:
+        """Get specific project by ID."""
+        return await self.request("GET", f"projects/{project_id}")
+
+    async def search_projects(self, sqlfilters: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """Search projects using SQL filters."""
+        params = {"limit": limit, "sqlfilters": sqlfilters}
+        result = await self.request("GET", "projects", params=params)
+        return result if isinstance(result, list) else []
+
+    async def create_project(self, data: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
+        """Create a new project."""
+        payload = self._merge_payload(data, **kwargs)
+        result = await self.request("POST", "projects", data=payload)
+        return self._extract_identifier(result)
+
+    async def update_project(self, project_id: int, data: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
+        """Update an existing project."""
+        payload = self._merge_payload(data, **kwargs)
+        return await self.request("PUT", f"projects/{project_id}", data=payload)
+
+    async def delete_project(self, project_id: int) -> Dict[str, Any]:
+        """Delete a project."""
+        return await self.request("DELETE", f"projects/{project_id}")
+
     # ============================================================================
     # RAW API CALL
     # ============================================================================
