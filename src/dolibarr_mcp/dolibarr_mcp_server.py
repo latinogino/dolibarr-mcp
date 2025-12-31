@@ -20,7 +20,7 @@ from .dolibarr_client import DolibarrClient, DolibarrAPIError
 # HTTP transport imports
 from starlette.applications import Starlette
 from starlette.responses import Response
-from starlette.routing import Route
+from starlette.routing import ASGIRoute, Route
 import uvicorn
 
 
@@ -1455,12 +1455,16 @@ def _build_http_app(session_manager: StreamableHTTPSessionManager) -> Starlette:
         async with session_manager.run():
             yield
 
+    async def asgi_handler(scope, receive, send):
+        """Adapter to call the StreamableHTTPSessionManager with ASGI signature."""
+        await session_manager.handle_request(scope, receive, send)
+
     return Starlette(
         routes=[
-            Route("/", session_manager.handle_request, methods=["GET", "POST", "DELETE"]),
-            Route("/{path:path}", session_manager.handle_request, methods=["GET", "POST", "DELETE"]),
-            Route("/", options_handler, methods=["OPTIONS"]),
-            Route("/{path:path}", options_handler, methods=["OPTIONS"]),
+            ASGIRoute("/", asgi_handler, methods=["GET", "POST", "DELETE"]),
+            ASGIRoute("/{path:path}", asgi_handler, methods=["GET", "POST", "DELETE"]),
+            ASGIRoute("/", options_handler, methods=["OPTIONS"]),
+            ASGIRoute("/{path:path}", options_handler, methods=["OPTIONS"]),
         ],
         lifespan=lifespan,
     )
