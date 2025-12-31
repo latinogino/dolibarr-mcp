@@ -20,7 +20,8 @@ from .dolibarr_client import DolibarrClient, DolibarrAPIError
 # HTTP transport imports
 from starlette.applications import Starlette
 from starlette.responses import Response
-from starlette.routing import ASGIRoute, Route
+from starlette.routing import Route
+from starlette.types import Receive, Scope, Send
 import uvicorn
 
 
@@ -1447,6 +1448,15 @@ async def _run_stdio_server(_config: Config) -> None:
 def _build_http_app(session_manager: StreamableHTTPSessionManager) -> Starlette:
     """Create Starlette app that forwards to the StreamableHTTP session manager."""
 
+    class ASGIEndpoint:
+        """Lightweight adapter so Route treats our handler as an ASGI app."""
+
+        def __init__(self, handler):
+            self.handler = handler
+
+        async def __call__(self, scope: Scope, receive: Receive, send: Send):
+            await self.handler(scope, receive, send)
+
     async def options_handler(request):
         """Lightweight CORS-friendly response for preflight requests."""
         return Response(status_code=204)
@@ -1459,12 +1469,14 @@ def _build_http_app(session_manager: StreamableHTTPSessionManager) -> Starlette:
         """Adapter to call the StreamableHTTPSessionManager with ASGI signature."""
         await session_manager.handle_request(scope, receive, send)
 
+    asgi_endpoint = ASGIEndpoint(asgi_handler)
+
     return Starlette(
         routes=[
-            ASGIRoute("/", asgi_handler, methods=["GET", "POST", "DELETE"]),
-            ASGIRoute("/{path:path}", asgi_handler, methods=["GET", "POST", "DELETE"]),
-            ASGIRoute("/", options_handler, methods=["OPTIONS"]),
-            ASGIRoute("/{path:path}", options_handler, methods=["OPTIONS"]),
+            Route("/", asgi_endpoint, methods=["GET", "POST", "DELETE"]),
+            Route("/{path:path}", asgi_endpoint, methods=["GET", "POST", "DELETE"]),
+            Route("/", options_handler, methods=["OPTIONS"]),
+            Route("/{path:path}", options_handler, methods=["OPTIONS"]),
         ],
         lifespan=lifespan,
     )
