@@ -19,6 +19,7 @@ from .dolibarr_client import DolibarrClient, DolibarrAPIError
 
 # HTTP transport imports
 from starlette.applications import Starlette
+from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 from starlette.routing import Route
 from starlette.types import Receive, Scope, Send
@@ -1462,7 +1463,14 @@ def _build_http_app(session_manager: StreamableHTTPSessionManager) -> Starlette:
 
     async def options_handler(request):
         """Lightweight CORS-friendly response for preflight requests."""
-        return Response(status_code=204)
+        return Response(
+            status_code=204,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+            },
+        )
 
     async def lifespan(app):
         async with session_manager.run():
@@ -1474,7 +1482,7 @@ def _build_http_app(session_manager: StreamableHTTPSessionManager) -> Starlette:
 
     asgi_endpoint = ASGIEndpoint(asgi_handler)
 
-    return Starlette(
+    app = Starlette(
         routes=[
             Route("/", asgi_endpoint, methods=["GET", "POST", "DELETE"]),
             Route("/{path:path}", asgi_endpoint, methods=["GET", "POST", "DELETE"]),
@@ -1483,6 +1491,17 @@ def _build_http_app(session_manager: StreamableHTTPSessionManager) -> Starlette:
         ],
         lifespan=lifespan,
     )
+
+    # Allow cross-origin requests from MCP-enabled web UIs and dashboards.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+        allow_credentials=False,
+    )
+
+    return app
 
 
 async def _run_http_server(config: Config) -> None:
