@@ -70,6 +70,9 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short --cov=src/dolibarr_mcp"
+markers = [
+    "integration: tests that require a real Dolibarr instance and valid credentials",
+]
 
 [tool.coverage.run]
 source = ["src/dolibarr_mcp"]

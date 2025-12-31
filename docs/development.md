@@ -41,6 +41,18 @@ If you encounter "command not found" errors, ensure your virtual environment is 
 python3 -m pytest
 ```
 
+### Integration tests
+
+The suite includes a small number of `@pytest.mark.integration` tests that hit a
+real Dolibarr instance. They are skipped by default unless valid credentials are
+present. To run them:
+
+```bash
+export DOLIBARR_URL="https://your-dolibarr.example.com/api/index.php"
+export DOLIBARR_API_KEY="your-api-key"
+pytest -m integration
+```
+
 ## Formatting and linting
 
 The project intentionally avoids heavy linting dependencies. Follow the coding
