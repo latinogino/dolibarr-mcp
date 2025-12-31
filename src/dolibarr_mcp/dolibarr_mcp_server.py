@@ -1389,6 +1389,7 @@ async def handle_call_tool(name: str, arguments: dict):
 async def test_api_connection(config: Config | None = None):
     """Test API connection and yield client if successful."""
     created_config = False
+    api_ok = False
     try:
         if config is None:
             config = Config()
@@ -1399,14 +1400,14 @@ async def test_api_connection(config: Config | None = None):
             print("⚠️  Warning: DOLIBARR_URL not configured in .env file", file=sys.stderr)
             print("⚠️  Using placeholder URL - API calls will fail", file=sys.stderr)
             print("📝 Please configure your .env file with valid Dolibarr credentials", file=sys.stderr)
-            yield True  # Allow server to start anyway
+            yield False  # Configuration incomplete
             return
             
         if not config.api_key or config.api_key == "your_dolibarr_api_key_here":
             print("⚠️  Warning: DOLIBARR_API_KEY not configured in .env file", file=sys.stderr)
             print("⚠️  API authentication will fail", file=sys.stderr)
             print("📝 Please configure your .env file with valid Dolibarr credentials", file=sys.stderr)
-            yield True  # Allow server to start anyway
+            yield False  # Configuration incomplete
             return
         
         async with DolibarrClient(config) as client:
@@ -1415,17 +1416,19 @@ async def test_api_connection(config: Config | None = None):
             if 'success' in result or 'dolibarr_version' in str(result):
                 print("✅ Dolibarr API connection successful", file=sys.stderr)
                 print("🎯 Full CRUD operations available for all Dolibarr modules", file=sys.stderr)
-                yield True
+                api_ok = True
             else:
                 print(f"⚠️  API test returned unexpected result: {result}", file=sys.stderr)
                 print("⚠️  Server will start but API calls may fail", file=sys.stderr)
-                yield True  # Allow server to start anyway
+                api_ok = False
     except Exception as e:
         print(f"⚠️  API test error: {e}", file=sys.stderr)
         if config is None or created_config:
             print("💡 Check your .env file configuration", file=sys.stderr)
         print("⚠️  Server will start but API calls may fail", file=sys.stderr)
-        yield True  # Allow server to start anyway
+        api_ok = False
+    
+    yield api_ok
 
 
 async def _run_stdio_server(_config: Config) -> None:
