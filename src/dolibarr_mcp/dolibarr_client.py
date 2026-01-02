@@ -135,6 +135,12 @@ class DolibarrClient:
         """Create a unique correlation identifier."""
         return str(uuid4())
 
+    def _generate_reference(self) -> str:
+        """Generate a unique reference using prefix, timestamp, and a UUID suffix."""
+        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        suffix = uuid4().hex[:8]
+        return f"{self.ref_autogen_prefix}_{timestamp}_{suffix}"
+
     def _build_validation_error(
         self,
         endpoint: str,
@@ -182,11 +188,15 @@ class DolibarrClient:
         aliases: Optional[Dict[str, List[str]]] = None,
         numeric_positive: Optional[List[str]] = None,
         enum_fields: Optional[Dict[str, List[Any]]] = None,
+        required_any_of: Optional[List[List[str]]] = None,
+        non_empty_fields: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Validate payload before sending to Dolibarr and optionally auto-generate refs."""
         aliases = aliases or {}
         numeric_positive = numeric_positive or []
         enum_fields = enum_fields or {}
+        required_any_of = required_any_of or []
+        non_empty_fields = non_empty_fields or []
 
         self._apply_aliases(payload, aliases)
 
@@ -198,6 +208,14 @@ class DolibarrClient:
 
         invalid_fields: List[Dict[str, str]] = []
 
+        for group in required_any_of:
+            if all(payload.get(field) in (None, "") for field in group):
+                missing_fields.append(" or ".join(group))
+
+        for field in non_empty_fields:
+            if field in payload and payload[field] in (None, "") and field not in missing_fields:
+                missing_fields.append(field)
+
         for field in numeric_positive:
             if field in payload and isinstance(payload[field], (int, float)) and payload[field] < 0:
                 invalid_fields.append({"field": field, "message": "must be a positive number"})
@@ -207,14 +225,24 @@ class DolibarrClient:
                 invalid_fields.append({"field": field, "message": f"must be one of {values}"})
 
         if "ref" in missing_fields and self.allow_ref_autogen:
-            payload["ref"] = f"{self.ref_autogen_prefix}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+            payload["ref"] = self._generate_reference()
             missing_fields = [f for f in missing_fields if f != "ref"]
 
         if missing_fields or invalid_fields:
+            details: List[str] = []
+            if missing_fields:
+                details.append(f"missing: {', '.join(missing_fields)}")
+            if invalid_fields:
+                details.append(
+                    "invalid: "
+                    + ", ".join(f["field"] for f in invalid_fields)
+                )
+            message = "Validation failed" + (f" ({'; '.join(details)})" if details else "")
             error_data = self._build_validation_error(
                 endpoint=endpoint,
                 missing_fields=missing_fields,
                 invalid_fields=invalid_fields,
+                message=message,
             )
             raise DolibarrValidationError(
                 message=error_data["message"],
@@ -561,10 +589,12 @@ class DolibarrClient:
         payload = self._validate_payload(
             endpoint="products",
             payload=payload,
-            required_fields=["ref", "label", "type", "price"],
+            required_fields=["ref", "label", "type"],
             aliases={"label": ["name"]},
-            numeric_positive=["price"],
+            numeric_positive=["price", "price_ttc"],
             enum_fields={"type": ["product", "service", 0, 1]},
+            required_any_of=[["price", "price_ttc"]],
+            non_empty_fields=["price", "price_ttc", "tva_tx"],
         )
         result = await self.request("POST", "products", data=payload)
         return self._extract_identifier(result)
@@ -791,6 +821,7 @@ class DolibarrClient:
             payload=payload,
             required_fields=["ref", "name", "socid"],
             aliases={"name": ["title"]},
+            non_empty_fields=["socid"],
         )
         result = await self.request("POST", "projects", data=payload)
         return self._extract_identifier(result)

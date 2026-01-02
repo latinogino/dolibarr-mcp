@@ -150,6 +150,76 @@ class TestDolibarrClient:
         assert sent_payload["ref"].startswith("AUTOREF_")
 
     @pytest.mark.asyncio
+    async def test_product_validation_requires_price_field(self):
+        """Ensure products require at least one pricing field."""
+        config = Config(
+            dolibarr_url="https://test.dolibarr.com/api/index.php",
+            api_key="test_key",
+        )
+
+        client = DolibarrClient(config)
+        client.request = AsyncMock(return_value={"id": 99})  # Should not be called
+
+        with pytest.raises(DolibarrValidationError) as exc_info:
+            await client.create_product({"ref": "SKU-1", "label": "Widget", "type": "product"})
+
+        assert exc_info.value.response_data["missing_fields"] == ["price or price_ttc"]
+        client.request.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_product_validation_allows_price_ttc(self):
+        """Validate products using price_ttc instead of price."""
+        config = Config(
+            dolibarr_url="https://test.dolibarr.com/api/index.php",
+            api_key="test_key",
+        )
+
+        client = DolibarrClient(config)
+        client.request = AsyncMock(return_value={"id": 101})
+
+        await client.create_product({"ref": "SKU-2", "label": "Widget TTC", "type": "product", "price_ttc": 12.5})
+
+        sent_payload = client.request.call_args.kwargs["data"]
+        assert sent_payload["price_ttc"] == 12.5
+        assert "price" not in sent_payload
+
+    @pytest.mark.asyncio
+    async def test_project_validation_missing_socid(self):
+        """Ensure projects require ref and socid (name/title also required)."""
+        config = Config(
+            dolibarr_url="https://test.dolibarr.com/api/index.php",
+            api_key="test_key",
+        )
+
+        client = DolibarrClient(config)
+        client.request = AsyncMock(return_value={"id": 33})  # Should not be called
+
+        with pytest.raises(DolibarrValidationError) as exc_info:
+            await client.create_project({"ref": "PRJ-1", "title": "Missing Soc"})
+
+        assert "socid" in exc_info.value.response_data["missing_fields"]
+        client.request.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_project_autogen_ref_when_enabled(self):
+        """Auto-generate project references when allowed and missing."""
+        config = Config(
+            dolibarr_url="https://test.dolibarr.com/api/index.php",
+            api_key="test_key",
+            allow_ref_autogen=True,
+            ref_autogen_prefix="PROJ",
+        )
+
+        client = DolibarrClient(config)
+        client.request = AsyncMock(return_value={"id": 77})
+
+        await client.create_project({"title": "Generated Ref Project", "socid": 5})
+
+        sent_payload = client.request.call_args.kwargs["data"]
+        assert "ref" in sent_payload
+        assert sent_payload["ref"].startswith("PROJ_")
+
+    @pytest.mark.asyncio
     @patch('aiohttp.ClientSession.request')
     async def test_internal_error_correlation_id(self, mock_request):
         """Include correlation IDs for unexpected server errors."""
