@@ -69,17 +69,92 @@ empty lists until records are created.
 }
 ```
 
-### Common Error Shape
+### Structured Error Shapes
+
+The MCP server and wrapper normalize Dolibarr errors into predictable JSON so
+callers can surface actionable messages and debugging breadcrumbs.
+
+#### Validation errors (`400`)
 
 ```json
 {
-  "error": {
-    "code": 404,
-    "message": "Not found"
-  }
+  "error": "Bad Request",
+  "status": 400,
+  "message": "Validation failed",
+  "missing_fields": ["ref", "socid"],
+  "invalid_fields": [
+    { "field": "price", "message": "must be a positive number" }
+  ],
+  "endpoint": "/api/index.php/products",
+  "timestamp": "2026-01-02T12:34:56Z"
 }
 ```
 
-Dolibarr communicates detailed failure information in the `error` object. The
-client wrapper turns these payloads into Python exceptions with the same
-metadata so MCP hosts can display friendly error messages.
+#### Unexpected errors (`500`)
+
+```json
+{
+  "error": "Internal Server Error",
+  "status": 500,
+  "message": "An unexpected error occurred while creating project",
+  "correlation_id": "abc123-uuid",
+  "endpoint": "/api/index.php/projects",
+  "timestamp": "2026-01-02T12:35:06Z"
+}
+```
+
+#### Successful create
+
+```json
+{
+  "status": 201,
+  "id": 42,
+  "ref": "FREELANCE_HOUR_TEST",
+  "message": "Product created"
+}
+```
+
+Include the `correlation_id` from a 500 response when opening support tickets
+so logs can be located quickly.
+
+### Create Endpoint Requirements & Examples
+
+The wrapper validates payloads before sending them to Dolibarr. Required fields:
+
+| Endpoint | Required fields | Notes |
+| --- | --- | --- |
+| `POST /products` | `ref`, `label`, `type`, `price` | `type` accepts `product`/`0` or `service`/`1`. |
+| `POST /projects` | `ref`, `name`, `socid` | `title` is accepted as an alias for `name`. |
+| `POST /invoices` | `socid` | Provide `lines` for invoice content. |
+| `POST /time` (timesheets) | `ref`, `task_id`, `duration`, `fk_project` | Provide `ref` or enable auto-generation. |
+
+#### Example: product create without `ref` (expected 400)
+
+```bash
+curl -X POST "https://dolibarr.example/api/index.php/products" \
+  -H "DOLAPIKEY: <REDACTED>" \
+  -H "Content-Type: application/json" \
+  -d '{"label":"Freelance hourly rate test — Gino test","type":"service","price":110.00,"tva_tx":19.0}'
+```
+
+#### Example: corrected product payload
+
+```bash
+curl -X POST "https://dolibarr.example/api/index.php/products" \
+  -H "DOLAPIKEY: <REDACTED>" \
+  -H "Content-Type: application/json" \
+  -d '{"ref":"FREELANCE_HOUR_TEST","label":"Freelance hourly rate test — Gino test","type":"service","price":110.00,"tva_tx":19.0}'
+```
+
+#### Example: project create (minimal payload)
+
+```bash
+curl -X POST "https://dolibarr.example/api/index.php/projects" \
+  -H "DOLAPIKEY: <REDACTED>" \
+  -H "Content-Type: application/json" \
+  -d '{"ref":"PERCISION_TEST_PROJECT","name":"Percision test — Project test","socid":8}'
+```
+
+If server-side reference auto-generation is enabled, omitting `ref` results in a
+predictable `AUTO_<timestamp>` reference. Otherwise, the wrapper will raise a
+client-side validation error before sending the request.

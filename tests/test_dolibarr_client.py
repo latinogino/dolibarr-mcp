@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 from dolibarr_mcp.config import Config
-from dolibarr_mcp.dolibarr_client import DolibarrClient, DolibarrAPIError
+from dolibarr_mcp.dolibarr_client import DolibarrClient, DolibarrAPIError, DolibarrValidationError
 
 
 class TestDolibarrClient:
@@ -110,6 +110,66 @@ class TestDolibarrClient:
             
             assert exc_info.value.status_code == 404
             assert "Object not found" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_validation_error_on_missing_ref(self):
+        """Ensure client-side validation catches missing product ref."""
+        config = Config(
+            dolibarr_url="https://test.dolibarr.com/api/index.php",
+            api_key="test_key",
+            allow_ref_autogen=False,
+        )
+
+        client = DolibarrClient(config)
+        client.request = AsyncMock(return_value={"id": 1})  # Should not be called
+
+        with pytest.raises(DolibarrValidationError) as exc_info:
+            await client.create_product({"label": "No Ref", "type": "service", "price": 12.5})
+
+        assert exc_info.value.response_data["missing_fields"] == ["ref"]
+        client.request.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_autogen_ref_when_enabled(self):
+        """Auto-generate refs when allowed by configuration."""
+        config = Config(
+            dolibarr_url="https://test.dolibarr.com/api/index.php",
+            api_key="test_key",
+            allow_ref_autogen=True,
+            ref_autogen_prefix="AUTOREF",
+        )
+
+        client = DolibarrClient(config)
+        client.request = AsyncMock(return_value={"id": 42, "ref": "AUTOREF_123"})
+
+        await client.create_product({"label": "Generated Ref Product", "type": "service", "price": 10})
+
+        assert client.request.await_count == 1
+        sent_payload = client.request.call_args.kwargs["data"]
+        assert "ref" in sent_payload
+        assert sent_payload["ref"].startswith("AUTOREF_")
+
+    @pytest.mark.asyncio
+    @patch('aiohttp.ClientSession.request')
+    async def test_internal_error_correlation_id(self, mock_request):
+        """Include correlation IDs for unexpected server errors."""
+        mock_response = AsyncMock()
+        mock_response.status = 500
+        mock_response.reason = "Internal Server Error"
+        mock_response.text.return_value = '{"message": "Database unavailable"}'
+        mock_request.return_value.__aenter__.return_value = mock_response
+
+        config = Config(
+            dolibarr_url="https://test.dolibarr.com/api/index.php",
+            api_key="test_key"
+        )
+
+        async with DolibarrClient(config) as client:
+            with pytest.raises(DolibarrAPIError) as exc_info:
+                await client.get_project_by_id(1)
+
+            assert exc_info.value.status_code == 500
+            assert "correlation_id" in exc_info.value.response_data
     
     def test_url_building(self):
         """Test URL building functionality."""

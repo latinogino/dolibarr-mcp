@@ -42,6 +42,7 @@ class TestProjectOperations:
             # Create
             mock_request.return_value = {"id": 200}
             project_id = await client.create_project({
+                "ref": "PRJ-NEW-WEBSITE",
                 "title": "New Website",
                 "description": "Website redesign project",
                 "socid": 1,

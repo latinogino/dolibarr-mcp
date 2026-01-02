@@ -53,6 +53,31 @@ class Config(BaseSettings):
         default=8080,
     )
 
+    allow_ref_autogen: bool = Field(
+        description="Allow automatic generation of reference fields when missing",
+        default=False,
+    )
+
+    ref_autogen_prefix: str = Field(
+        description="Prefix to use when auto-generating references",
+        default="AUTO",
+    )
+
+    debug_mode: bool = Field(
+        description="Enable verbose debug logging without exposing secrets",
+        default=False,
+    )
+
+    max_retries: int = Field(
+        description="Maximum retries for transient HTTP errors",
+        default=2,
+    )
+
+    retry_backoff_seconds: float = Field(
+        description="Base backoff (seconds) for retry strategy",
+        default=0.5,
+    )
+
     @field_validator("dolibarr_url")
     @classmethod
     def validate_dolibarr_url(cls, v: str) -> str:

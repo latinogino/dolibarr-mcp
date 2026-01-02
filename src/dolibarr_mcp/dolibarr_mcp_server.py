@@ -4,6 +4,8 @@ import asyncio
 import json
 import sys
 import logging
+import uuid
+from datetime import datetime
 from contextlib import asynccontextmanager
 
 # Import MCP components
@@ -1377,12 +1379,24 @@ async def handle_call_tool(name: str, arguments: dict):
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
     
     except DolibarrAPIError as e:
-        error_result = {"error": f"Dolibarr API Error: {str(e)}", "type": "api_error"}
-        return [TextContent(type="text", text=json.dumps(error_result, indent=2))]
+        error_payload = e.response_data or {
+            "error": "Dolibarr API Error",
+            "status": e.status_code or 500,
+            "message": str(e),
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+        return [TextContent(type="text", text=json.dumps(error_payload, indent=2))]
     
     except Exception as e:
-        error_result = {"error": f"Tool execution failed: {str(e)}", "type": "internal_error"}
-        print(f"🔥 Tool execution error: {e}", file=sys.stderr)  # Debug logging
+        correlation_id = str(uuid.uuid4())
+        error_result = {
+            "error": "Internal Server Error",
+            "status": 500,
+            "message": f"Tool execution failed: {str(e)}",
+            "correlation_id": correlation_id,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+        print(f"🔥 Tool execution error ({correlation_id}): {e}", file=sys.stderr)  # Debug logging
         return [TextContent(type="text", text=json.dumps(error_result, indent=2))]
 
 

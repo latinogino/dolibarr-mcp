@@ -16,6 +16,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from dolibarr_mcp import DolibarrClient, Config
+from dolibarr_mcp.dolibarr_client import DolibarrValidationError
 
 
 class TestCRUDOperations:
@@ -78,7 +79,9 @@ class TestCRUDOperations:
             # Create
             mock_request.return_value = {"id": 10}
             product_id = await client.create_product({
+                "ref": "TEST-PROD",
                 "label": "Test Product",
+                "type": "service",
                 "price": 99.99,
                 "description": "Test product description"
             })
@@ -330,7 +333,7 @@ class TestCRUDOperations:
             
             # Test validation error
             mock_request.side_effect = Exception("Validation Error: Missing required field")
-            with pytest.raises(Exception, match="Validation"):
+            with pytest.raises(DolibarrValidationError):
                 await client.create_product({})
             
             # Test connection error

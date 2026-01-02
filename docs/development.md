@@ -59,6 +59,22 @@ The project intentionally avoids heavy linting dependencies. Follow the coding
 style already present in the repository and run the test-suite before opening a
 pull request.
 
+## Debugging 500 responses with correlation IDs
+
+Unexpected Dolibarr API failures return a `correlation_id` in the JSON body.
+Include this value when filing issues or investigating user reports.
+
+1. Capture the `correlation_id` from the HTTP 500 response body.
+2. Search the MCP server logs (stdout/stderr) for that ID to locate the full
+   stack trace. For docker users:
+
+   ```bash
+   docker logs <container> 2>&1 | grep "<correlation_id>"
+   ```
+
+3. The log entry contains the failing endpoint and sanitized payload details.
+   Avoid logging `DOLAPIKEY` or other secrets in bug reports.
+
 ## Docker tooling
 
 Container assets live in `docker/`:
