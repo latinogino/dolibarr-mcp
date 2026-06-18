@@ -12,7 +12,7 @@ from .testing import test_connection as run_test_connection
 
 
 @click.group()
-@click.version_option(version="1.1.0", prog_name="dolibarr-mcp")
+@click.version_option(version="1.2.0", prog_name="dolibarr-mcp")
 def cli():
     """Dolibarr MCP Server - Professional ERP integration via Model Context Protocol."""
     pass

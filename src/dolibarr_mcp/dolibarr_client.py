@@ -856,6 +856,138 @@ class DolibarrClient:
         return await self.request("DELETE", f"projects/{project_id}")
 
     # ============================================================================
+    # TICKET MANAGEMENT
+    # ============================================================================
+
+    async def get_tickets(self, limit: int = 100, page: int = 1, status: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get list of tickets.
+
+        When ``status`` is None the open tickets are returned (excluding closed
+        and cancelled). The Dolibarr ``status`` query parameter is unreliable for
+        tickets, so filtering is done via ``sqlfilters`` on ``t.fk_statut``.
+        """
+        params: Dict[str, Any] = {"limit": limit}
+        if page and page > 1:
+            params["page"] = page
+        if status is not None:
+            params["sqlfilters"] = f"(t.fk_statut:=:{int(status)})"
+        else:
+            params["sqlfilters"] = "(t.fk_statut:!=:8) and (t.fk_statut:!=:9)"
+        result = await self.request("GET", "tickets", params=params)
+        return result if isinstance(result, list) else []
+
+    async def get_ticket_by_ref(self, ref: str) -> Dict[str, Any]:
+        """Get a specific ticket by its business reference (e.g. ``TI1046``).
+
+        The response includes the ``messages`` array and the ``track_id`` needed
+        to post new messages.
+        """
+        return await self.request("GET", f"tickets/ref/{ref}")
+
+    async def search_tickets(self, sqlfilters: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """Search tickets using SQL filters."""
+        params = {"limit": limit, "sqlfilters": sqlfilters}
+        result = await self.request("GET", "tickets", params=params)
+        return result if isinstance(result, list) else []
+
+    async def create_ticket(self, data: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
+        """Create a new ticket.
+
+        Dolibarr requires ``subject`` and ``message``. ``socid`` links the ticket
+        to a thirdparty and is accepted via the ``fk_soc`` alias as well.
+        """
+        payload = self._merge_payload(data, **kwargs)
+        payload = self._validate_payload(
+            endpoint="tickets",
+            payload=payload,
+            required_fields=["subject", "message"],
+            aliases={"socid": ["fk_soc"]},
+            non_empty_fields=["subject", "message"],
+        )
+        result = await self.request("POST", "tickets", data=payload)
+        return self._extract_identifier(result)
+
+    async def _resolve_ticket_track_id(self, ref: str) -> str:
+        """Resolve a ticket reference to its ``track_id``."""
+        ticket = await self.get_ticket_by_ref(ref)
+        track_id = ticket.get("track_id") if isinstance(ticket, dict) else None
+        if not track_id:
+            error_data = self._build_validation_error(
+                endpoint="tickets/messages",
+                invalid_fields=[{"field": "ref", "message": f"no track_id found for ticket ref '{ref}'"}],
+                message=f"Could not resolve track_id for ticket ref '{ref}'",
+            )
+            raise DolibarrValidationError(
+                message=error_data["message"],
+                status_code=error_data["status"],
+                response_data=error_data,
+            )
+        return track_id
+
+    async def add_ticket_message(self, data: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
+        """Add a message to a ticket.
+
+        The Dolibarr endpoint ``POST /tickets/messages`` requires ``track_id`` and
+        ``message``. For convenience a ``ref`` may be supplied instead of
+        ``track_id``; it is resolved to the matching ``track_id`` first.
+        """
+        payload = self._merge_payload(data, **kwargs)
+        payload = self._validate_payload(
+            endpoint="tickets/messages",
+            payload=payload,
+            required_fields=["message"],
+            required_any_of=[["track_id", "ref"]],
+            non_empty_fields=["message"],
+        )
+
+        if not payload.get("track_id"):
+            payload["track_id"] = await self._resolve_ticket_track_id(payload["ref"])
+        # ``ref`` is not part of the API payload; drop it before sending.
+        payload.pop("ref", None)
+
+        return await self.request("POST", "tickets/messages", data=payload)
+
+    async def update_ticket(
+        self,
+        ticket_id: Optional[int] = None,
+        ref: Optional[str] = None,
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Update an existing ticket.
+
+        The Dolibarr ``PUT`` endpoint only accepts the numeric id. When only a
+        ``ref`` is known it is resolved to the internal id first.
+        """
+        payload = self._merge_payload(data, **kwargs)
+        if ticket_id is None:
+            if not ref:
+                error_data = self._build_validation_error(
+                    endpoint="tickets",
+                    missing_fields=["ticket_id or ref"],
+                    message="Validation failed (missing: ticket_id or ref)",
+                )
+                raise DolibarrValidationError(
+                    message=error_data["message"],
+                    status_code=error_data["status"],
+                    response_data=error_data,
+                )
+            ticket = await self.get_ticket_by_ref(ref)
+            ticket_id = ticket.get("id") if isinstance(ticket, dict) else None
+            if not ticket_id:
+                error_data = self._build_validation_error(
+                    endpoint="tickets",
+                    invalid_fields=[{"field": "ref", "message": f"no ticket found for ref '{ref}'"}],
+                    message=f"Could not resolve ticket id for ref '{ref}'",
+                )
+                raise DolibarrValidationError(
+                    message=error_data["message"],
+                    status_code=error_data["status"],
+                    response_data=error_data,
+                )
+        return await self.request("PUT", f"tickets/{ticket_id}", data=payload)
+
+    # ============================================================================
     # RAW API CALL
     # ============================================================================
     
