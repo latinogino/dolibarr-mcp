@@ -866,7 +866,9 @@ class DolibarrClient:
         and cancelled). The Dolibarr ``status`` query parameter is unreliable for
         tickets, so filtering is done via ``sqlfilters`` on ``t.fk_statut``.
         """
-        params: Dict[str, Any] = {"limit": limit, "page": page}
+        params: Dict[str, Any] = {"limit": limit}
+        if page and page > 1:
+            params["page"] = page
         if status is not None:
             params["sqlfilters"] = f"(t.fk_statut:=:{int(status)})"
         else:
