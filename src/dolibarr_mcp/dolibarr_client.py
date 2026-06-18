@@ -817,7 +817,9 @@ class DolibarrClient:
     
     async def get_projects(self, limit: int = 100, page: int = 1, status: Optional[int] = None) -> List[Dict[str, Any]]:
         """Get list of projects."""
-        params: Dict[str, Any] = {"limit": limit, "page": page}
+        params: Dict[str, Any] = {"limit": limit}
+        if page and page > 1:
+            params["page"] = page
         if status is not None:
             params["status"] = status
         result = await self.request("GET", "projects", params=params)
