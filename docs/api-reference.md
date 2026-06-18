@@ -29,6 +29,7 @@ implements for PrestaShop.
 | Orders          | `/orders`                   | Order CRUD operations                   |
 | Projects        | `/projects`                 | Project CRUD operations & Search        |
 | Contacts        | `/contacts`                 | Contact CRUD operations                 |
+| Tickets         | `/tickets`                  | `get_tickets`, `get_ticket_by_ref`, `search_tickets`, `create_ticket`, `add_ticket_message`, `update_ticket` |
 | Raw passthrough | Any relative path           | `dolibarr_raw_api` tool for quick tests |
 
 Every endpoint supports create, read, update and delete operations unless noted
@@ -158,3 +159,27 @@ curl -X POST "https://dolibarr.example/api/index.php/projects" \
 If server-side reference auto-generation is enabled, omitting `ref` results in a
 predictable `AUTO_<timestamp>` reference. Otherwise, the wrapper will raise a
 client-side validation error before sending the request.
+
+## Tickets
+
+The ticket tools work with the business reference (the `ref` column, e.g.
+`TI1046`) rather than the internal numeric row id. Note these endpoint
+specifics:
+
+- **List / search** – `GET /tickets`. The Dolibarr `status` query parameter is
+  unreliable for tickets, so `get_tickets` filters via `sqlfilters` on
+  `t.fk_statut`. Without a status filter it returns open tickets only
+  (excludes `8`=closed and `9`=cancelled). Status codes: `0`=unread, `1`=read,
+  `3`=assigned, `4`=in progress, `5`=waiting for customer, `7`=waiting for
+  helpdesk, `8`=closed, `9`=cancelled.
+- **Read by reference** – `get_ticket_by_ref` calls `GET /tickets/ref/{ref}`.
+  The response includes the `messages` array and the `track_id`.
+- **Create** – `create_ticket` calls `POST /tickets` and requires `subject` and
+  `message`. `socid` links a thirdparty (the `fk_soc` alias is accepted).
+- **Add message** – `add_ticket_message` calls `POST /tickets/messages`. The
+  Dolibarr endpoint requires `track_id` (not the ref). For convenience the tool
+  accepts either `track_id` or `ref`; when only `ref` is given it is resolved to
+  the `track_id` via `GET /tickets/ref/{ref}` first.
+- **Update** – `update_ticket` calls `PUT /tickets/{id}`. This endpoint only
+  accepts the numeric id, so when only a `ref` is supplied the tool resolves it
+  to the internal id first.

@@ -4,6 +4,14 @@ All notable changes to the Dolibarr MCP Server are documented here. The project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and adopts the
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format.
 
+## [1.2.0]
+
+### Added
+- Ticket management tools: `get_tickets`, `get_ticket_by_ref`, `search_tickets`, `create_ticket`, `add_ticket_message`, and `update_ticket`. Tickets are addressed by their business reference (`ref`, e.g. `TI1046`) rather than the internal row id; `add_ticket_message` and `update_ticket` resolve a `ref` to the required `track_id`/numeric id automatically.
+
+### Changed
+- Unified the project version to `1.2.0` across `pyproject.toml`, package `__version__`, the CLI, the MCP server handshake, and `docker-compose.yml`.
+
 ### Added
 - Restored README.md and CHANGELOG.md after merge conflicts while preserving the streamlined structure shared with `prestashop-mcp`.
 - Documented platform-specific setup covering Linux/macOS shells, Windows Visual Studio `vsenv`, and the Docker workflow.

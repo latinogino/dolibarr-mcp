@@ -1101,6 +1101,190 @@ async def handle_list_tools():
             },
         ),
 
+        # Ticket Management
+        Tool(
+            name="get_tickets",
+            description=(
+                "Get a list of tickets from Dolibarr. By default only open tickets are returned "
+                "(closed and cancelled tickets are excluded). Optionally filter by a specific status. "
+                "Status codes: 0=unread, 1=read, 3=assigned, 4=in progress, 5=waiting for customer, "
+                "7=waiting for helpdesk, 8=closed, 9=cancelled. "
+                "Do not use this to look up a single ticket by reference (use get_ticket_by_ref) "
+                "or to search by subject/reference (use search_tickets)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of tickets to return (default: 100)",
+                        "default": 100,
+                    },
+                    "page": {
+                        "type": "integer",
+                        "description": "Page number for pagination (default: 1)",
+                        "default": 1,
+                    },
+                    "status": {
+                        "type": "integer",
+                        "description": (
+                            "Optional exact status filter (fk_statut). Omit to return all open "
+                            "tickets. E.g. 4=in progress, 5=waiting for customer, 8=closed."
+                        ),
+                    },
+                },
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="get_ticket_by_ref",
+            description=(
+                "Get the full details of exactly one ticket by its business reference (e.g. 'TI1046'). "
+                "This is the column 'ref' in Dolibarr, NOT the internal numeric row id. "
+                "The response includes the messages array and the track_id required for add_ticket_message."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ref": {
+                        "type": "string",
+                        "description": "Ticket reference, e.g. 'TI1046'.",
+                    }
+                },
+                "required": ["ref"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="search_tickets",
+            description=(
+                "Search tickets by reference, subject or track_id. Use this when you have a partial or "
+                "full term and need to find matching tickets without loading the full ticket list."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search term matched against ticket ref, subject and track_id.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results",
+                        "default": 20,
+                    },
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="create_ticket",
+            description="Create a new ticket. Requires a subject and an initial message.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "subject": {"type": "string", "description": "Ticket subject/title"},
+                    "message": {
+                        "type": "string",
+                        "description": "Initial ticket message body",
+                    },
+                    "socid": {
+                        "type": "integer",
+                        "description": "Linked thirdparty/customer ID (optional)",
+                    },
+                    "type_code": {
+                        "type": "string",
+                        "description": "Ticket type code, e.g. 'REQUEST', 'ISSUE' (optional)",
+                    },
+                    "category_code": {
+                        "type": "string",
+                        "description": "Ticket category code (optional)",
+                    },
+                    "severity_code": {
+                        "type": "string",
+                        "description": "Ticket severity code, e.g. 'NORMAL' (optional)",
+                    },
+                    "fk_user_assign": {
+                        "type": "integer",
+                        "description": "ID of the user the ticket is assigned to (optional)",
+                    },
+                },
+                "required": ["subject", "message"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="add_ticket_message",
+            description=(
+                "Add a message to an existing ticket. Provide the ticket reference 'ref' (e.g. 'TI1046') "
+                "OR the 'track_id'. If only 'ref' is given the track_id is resolved automatically. "
+                "Prefer 'ref' unless you already know the track_id."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ref": {
+                        "type": "string",
+                        "description": "Ticket reference, e.g. 'TI1046' (alternative to track_id).",
+                    },
+                    "track_id": {
+                        "type": "string",
+                        "description": "Ticket track_id (alternative to ref).",
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "Message body to add to the ticket",
+                    },
+                    "private": {
+                        "type": "integer",
+                        "description": "1 for an internal/private message, 0 for public (optional)",
+                    },
+                },
+                "required": ["message"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="update_ticket",
+            description=(
+                "Update an existing ticket (e.g. change status, subject or assignment). "
+                "Provide the ticket reference 'ref' (e.g. 'TI1046') OR the numeric 'ticket_id'. "
+                "If only 'ref' is given the internal id is resolved automatically."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ref": {
+                        "type": "string",
+                        "description": "Ticket reference, e.g. 'TI1046' (alternative to ticket_id).",
+                    },
+                    "ticket_id": {
+                        "type": "integer",
+                        "description": "Internal numeric ticket id (alternative to ref).",
+                    },
+                    "subject": {"type": "string", "description": "Updated subject"},
+                    "message": {"type": "string", "description": "Updated message"},
+                    "fk_statut": {
+                        "type": "integer",
+                        "description": (
+                            "New status. 0=unread, 1=read, 3=assigned, 4=in progress, "
+                            "5=waiting for customer, 7=waiting for helpdesk, 8=closed, 9=cancelled."
+                        ),
+                    },
+                    "fk_user_assign": {
+                        "type": "integer",
+                        "description": "ID of the user the ticket is assigned to",
+                    },
+                    "severity_code": {
+                        "type": "string",
+                        "description": "Ticket severity code, e.g. 'NORMAL'",
+                    },
+                },
+                "additionalProperties": False,
+            },
+        ),
+
         # Raw API Access
         Tool(
             name="dolibarr_raw_api",
@@ -1369,6 +1553,37 @@ async def handle_call_tool(name: str, arguments: dict):
             elif name == "delete_project":
                 result = await client.delete_project(arguments["project_id"])
 
+            # Ticket Management
+            elif name == "get_tickets":
+                result = await client.get_tickets(
+                    limit=arguments.get("limit", 100),
+                    page=arguments.get("page", 1),
+                    status=arguments.get("status"),
+                )
+
+            elif name == "get_ticket_by_ref":
+                result = await client.get_ticket_by_ref(arguments["ref"])
+
+            elif name == "search_tickets":
+                query = _escape_sqlfilter(arguments["query"])
+                limit = arguments.get("limit", 20)
+                sqlfilters = (
+                    f"((t.ref:like:'%{query}%') OR (t.subject:like:'%{query}%') "
+                    f"OR (t.track_id:like:'%{query}%'))"
+                )
+                result = await client.search_tickets(sqlfilters=sqlfilters, limit=limit)
+
+            elif name == "create_ticket":
+                result = await client.create_ticket(**arguments)
+
+            elif name == "add_ticket_message":
+                result = await client.add_ticket_message(**arguments)
+
+            elif name == "update_ticket":
+                ticket_id = arguments.pop("ticket_id", None)
+                ref = arguments.pop("ref", None)
+                result = await client.update_ticket(ticket_id=ticket_id, ref=ref, **arguments)
+
             # Raw API Access
             elif name == "dolibarr_raw_api":
                 result = await client.dolibarr_raw_api(**arguments)
@@ -1454,7 +1669,7 @@ async def _run_stdio_server(_config: Config) -> None:
             write_stream,
             InitializationOptions(
                 server_name="dolibarr-mcp",
-                server_version="1.0.1",
+                server_version="1.2.0",
                 capabilities=server.get_capabilities(
                     notification_options=NotificationOptions(),
                     experimental_capabilities={},
