@@ -263,6 +263,12 @@ class TestDolibarrClient:
         url = client._build_url("users")
         assert url == "https://test.dolibarr.com/api/index.php/users"
 
+        # Test that status is not special-cased: dropping /index.php would
+        # only resolve on hosts that have URL rewriting enabled
+        client.base_url = "https://test.dolibarr.com/api/index.php"
+        url = client._build_url("status")
+        assert url == "https://test.dolibarr.com/api/index.php/status"
+
 
 class TestDolibarrAPIError:
     """Test cases for DolibarrAPIError."""

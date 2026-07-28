@@ -111,10 +111,6 @@ class DolibarrClient:
         endpoint = endpoint.lstrip('/')
         base = self.base_url.rstrip('/')
 
-        if endpoint == "status":
-            base_without_index = base.replace('/index.php', '')
-            return f"{base_without_index}/status"
-
         return f"{base}/{endpoint}"
 
     def _mask_api_key(self) -> str:
