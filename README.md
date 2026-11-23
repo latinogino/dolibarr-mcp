@@ -97,7 +97,12 @@ overwritten by `git pull` on your server.
 | `DOLIBARR_API_KEY` | Personal Dolibarr API token. |
 | `LOG_LEVEL` | Optional logging verbosity (`INFO`, `DEBUG`, `WARNING`, …). |
 | `MCP_TRANSPORT` | Transport to use: `stdio` (default) or `http` for streamable HTTP. |
-| `MCP_HTTP_HOST` | Host/interface to bind when using HTTP transport (default `0.0.0.0`). |
+| `MCP_HTTP_HOST` | Host/interface to bind when using HTTP transport (default `127.0.0.1`). |
+| `MCP_HTTP_TOKEN` | Bearer token required on every HTTP request. **Mandatory** when `MCP_HTTP_HOST` is not a loopback address (always the case in Docker). |
+| `MCP_CORS_ORIGINS` | Comma-separated list of allowed browser origins. Empty (default) disables CORS. |
+| `MCP_READ_ONLY` | `true` exposes only read tools (no create/update/delete/validate). Default `false`. |
+| `MCP_ENABLE_RAW_API` | `true` exposes the `dolibarr_raw_api` tool (arbitrary API calls). Default `false`. |
+| `MCP_BIND_ADDRESS` | Host interface published by Docker Compose (default `127.0.0.1`). |
 | `MCP_HTTP_PORT` | Port to bind when using HTTP transport (default `8080`). |
 | `MCP_HOST_PORT` | Optional host port to publish in Docker Compose (default `18004`). |
 | `MCP_CONTAINER_NAME` | Optional Docker Compose container name (default `dolibarr-mcp-server`). |
@@ -152,7 +157,8 @@ Example configuration (URL + optional headers):
   "name": "dolibarr",
   "url": "http://localhost:8080/",
   "headers": {
-    "mcp-protocol-version": "2024-11-05"
+    "mcp-protocol-version": "2024-11-05",
+    "Authorization": "Bearer <MCP_HTTP_TOKEN>"
   }
 }
 ```
@@ -170,10 +176,24 @@ Example entry:
 ```text
 Name: dolibarr
 URL:  http://localhost:8080/
+Header: Authorization: Bearer <MCP_HTTP_TOKEN>
 ```
 
 If you are using Docker, substitute the host port published by
 `docker-compose.yml`, for example `http://localhost:18004/`.
+
+### 🔒 Security
+
+- **HTTP authentication**: set `MCP_HTTP_TOKEN` (e.g. `openssl rand -hex 32`); clients must
+  send `Authorization: Bearer <token>`. The server refuses to listen on a non-loopback
+  interface without a token, and Docker Compose refuses to start without it.
+- **Network exposure**: the listener binds `127.0.0.1` by default and Docker Compose
+  publishes the port on `127.0.0.1` only. Expose it further only behind a VPN or an
+  authenticated reverse proxy (`MCP_BIND_ADDRESS`).
+- **CORS** is disabled unless origins are listed in `MCP_CORS_ORIGINS`.
+- **Least privilege**: create a dedicated Dolibarr user with minimal rights for the API key,
+  use `MCP_READ_ONLY=true` when write access is not needed, and keep
+  `dolibarr_raw_api` disabled (`MCP_ENABLE_RAW_API=false`) unless required.
 
 ## ▶️ Usage
 
