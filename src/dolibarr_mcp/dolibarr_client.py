@@ -612,13 +612,39 @@ class DolibarrClient:
     # INVOICE MANAGEMENT
     # ============================================================================
     
-    async def get_invoices(self, limit: int = 100, status: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Get list of invoices."""
-        params = {"limit": limit}
+    async def get_invoices(
+        self,
+        limit: int = 100,
+        status: Optional[str] = None,
+        customer_id: Optional[int] = None,
+        page: int = 0,
+        sortfield: Optional[str] = None,
+        sortorder: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Get list of invoices.
+
+        ``page`` is zero-based, as in the Dolibarr REST API. ``customer_id``
+        maps to Dolibarr's ``thirdparty_ids`` filter.
+        """
+        params: Dict[str, Any] = {"limit": limit}
         if status:
             params["status"] = status
-        
-        result = await self.request("GET", "invoices", params=params)
+        if customer_id is not None:
+            params["thirdparty_ids"] = str(customer_id)
+        if page:
+            params["page"] = page
+        if sortfield:
+            params["sortfield"] = sortfield
+        if sortorder:
+            params["sortorder"] = sortorder
+
+        try:
+            result = await self.request("GET", "invoices", params=params)
+        except DolibarrAPIError as exc:
+            # Dolibarr answers 404 when the filtered list is empty.
+            if exc.status_code == 404:
+                return []
+            raise
         return result if isinstance(result, list) else []
     
     async def get_invoice_by_id(self, invoice_id: int) -> Dict[str, Any]:
