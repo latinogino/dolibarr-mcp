@@ -155,6 +155,20 @@ class DolibarrClient:
             "timestamp": self._now_iso(),
         }
 
+    @staticmethod
+    def _upstream_message(response_data: Any) -> Optional[str]:
+        """Extract Dolibarr's error text (flat or RestException-shaped)."""
+        if not isinstance(response_data, dict):
+            return None
+        error = response_data.get("error")
+        if isinstance(error, dict) and error.get("message"):
+            return str(error["message"])
+        if response_data.get("message"):
+            return str(response_data["message"])
+        if response_data.get("raw_response"):
+            return str(response_data["raw_response"])[:500]
+        return None
+
     def _build_internal_error(self, endpoint: str, message: str, correlation_id: str) -> Dict[str, Any]:
         """Build a structured internal server error response."""
         return {
@@ -327,9 +341,11 @@ class DolibarrClient:
                             correlation_id = self._generate_correlation_id()
                             internal_error = self._build_internal_error(
                                 endpoint=endpoint,
-                                message=response_data.get("message", f"An unexpected error occurred while processing {endpoint}"),
+                                message=self._upstream_message(response_data)
+                                or f"An unexpected error occurred while processing {endpoint}",
                                 correlation_id=correlation_id,
                             )
+                            internal_error["status"] = response.status
                             self.logger.error(
                                 "Server error %s for %s (correlation_id=%s): %s",
                                 response.status,
@@ -715,7 +731,36 @@ class DolibarrClient:
             payload["fk_product"] = payload.pop("product_id")
         self._map_line_vat(payload)
 
-        return await self.request("POST", f"invoices/{invoice_id}/lines", data=payload)
+        existing_ids = await self._invoice_line_ids(invoice_id)
+        try:
+            return await self.request("POST", f"invoices/{invoice_id}/lines", data=payload)
+        except DolibarrAPIError as exc:
+            if not exc.status_code or exc.status_code < 500 or existing_ids is None:
+                raise
+            # Dolibarr sometimes answers 5xx although the line was inserted.
+            # Report the created line instead of an error so callers don't
+            # retry and duplicate it.
+            created = (await self._invoice_line_ids(invoice_id) or set()) - existing_ids
+            if len(created) != 1:
+                raise
+            line_id = created.pop()
+            self.logger.warning(
+                "Dolibarr returned HTTP %s for invoices/%s/lines but line %s was created",
+                exc.status_code,
+                invoice_id,
+                line_id,
+            )
+            return line_id
+
+    async def _invoice_line_ids(self, invoice_id: int) -> Optional[set]:
+        """Return the ids of an invoice's lines, or None if they can't be read."""
+        try:
+            lines = await self.request("GET", f"invoices/{invoice_id}/lines")
+        except DolibarrAPIError:
+            return None
+        if not isinstance(lines, list):
+            return None
+        return {int(line.get("id") or line.get("rowid")) for line in lines}
 
     async def update_invoice_line(
         self,
@@ -724,10 +769,47 @@ class DolibarrClient:
         data: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> Dict[str, Any]:
-        """Update a line in an invoice."""
-        payload = self._merge_payload(data, **kwargs)
-        self._map_line_vat(payload)
+        """Update a line in an invoice.
+
+        Dolibarr's PUT on an invoice line resets every field that is not sent
+        (qty, price, description... fall back to 0/empty), so the current line
+        is read first and the requested changes are merged into it.
+        """
+        changes = self._merge_payload(data, **kwargs)
+        self._map_line_vat(changes)
+
+        lines = await self.request("GET", f"invoices/{invoice_id}/lines")
+        current = next(
+            (
+                line for line in (lines if isinstance(lines, list) else [])
+                if str(line.get("id") or line.get("rowid")) == str(line_id)
+            ),
+            None,
+        )
+        if current is None:
+            raise DolibarrAPIError(
+                message=f"Line {line_id} not found on invoice {invoice_id}",
+                status_code=404,
+            )
+
+        payload = {
+            field: current.get(field)
+            for field in self._INVOICE_LINE_FIELDS
+            if current.get(field) not in (None, "")
+        }
+        if "desc" not in payload and current.get("description"):
+            payload["desc"] = current["description"]
+        payload.update(changes)
         return await self.request("PUT", f"invoices/{invoice_id}/lines/{line_id}", data=payload)
+
+    # Line fields Dolibarr rewrites on PUT invoices/{id}/lines/{lineid}.
+    _INVOICE_LINE_FIELDS = (
+        "desc", "subprice", "qty", "tva_tx", "localtax1_tx", "localtax2_tx",
+        "fk_product", "product_type", "remise_percent", "info_bits",
+        "special_code", "fk_parent_line", "label", "fk_unit", "pa_ht",
+        "fk_fournprice", "date_start", "date_end", "situation_percent",
+        "multicurrency_subprice", "vat_src_code", "rang", "array_options",
+    )
 
     async def delete_invoice_line(self, invoice_id: int, line_id: int) -> Dict[str, Any]:
         """Delete a line from an invoice."""
