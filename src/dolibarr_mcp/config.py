@@ -2,6 +2,7 @@
 
 import os
 import sys
+from typing import List
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -45,12 +46,35 @@ class Config(BaseSettings):
 
     mcp_http_host: str = Field(
         description="HTTP host/interface for MCP server",
-        default="0.0.0.0",
+        default="127.0.0.1",
     )
 
     mcp_http_port: int = Field(
         description="HTTP port for MCP server",
         default=8080,
+    )
+
+    mcp_http_token: str = Field(
+        description=(
+            "Bearer token required on every HTTP request (Authorization: Bearer <token>). "
+            "Mandatory when the HTTP listener is not bound to a loopback address."
+        ),
+        default="",
+    )
+
+    mcp_cors_origins: str = Field(
+        description="Comma-separated list of allowed CORS origins (empty = CORS disabled)",
+        default="",
+    )
+
+    mcp_read_only: bool = Field(
+        description="Expose only read tools (no create/update/delete/validate)",
+        default=False,
+    )
+
+    mcp_enable_raw_api: bool = Field(
+        description="Expose the dolibarr_raw_api escape-hatch tool",
+        default=False,
     )
 
     allow_ref_autogen: bool = Field(
@@ -170,7 +194,17 @@ class Config(BaseSettings):
     @classmethod
     def validate_http_host(cls, v: str) -> str:
         """Validate HTTP host."""
-        return v or os.getenv("MCP_HTTP_HOST", "0.0.0.0")
+        return v or os.getenv("MCP_HTTP_HOST", "127.0.0.1")
+
+    @property
+    def cors_origins(self) -> List[str]:
+        """Parsed list of allowed CORS origins."""
+        return [o.strip() for o in self.mcp_cors_origins.split(",") if o.strip()]
+
+    @property
+    def http_host_is_loopback(self) -> bool:
+        """True when the HTTP listener is only reachable locally."""
+        return self.mcp_http_host in {"127.0.0.1", "localhost", "::1"}
 
     @field_validator("mcp_http_port")
     @classmethod

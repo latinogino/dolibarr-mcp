@@ -1,21 +1,15 @@
-# Core MCP dependencies
-mcp>=1.0.0
-
-# HTTP and async support
-aiohttp>=3.9.0
-
-# Data validation and settings
-pydantic>=2.5.0
-pydantic-settings>=2.0.0
-python-dotenv>=1.0.0
-
-# CLI support
-click>=8.1.0
-
-# HTTP server runtime for Streamable HTTP transport
-uvicorn>=0.25.0
+# Pinned runtime dependencies (tested versions).
+# NOTE: mcp 2.x is NOT compatible with this code base (Server decorators API changed).
+mcp==1.30.0
+aiohttp==3.14.5
+pydantic==2.14.4
+pydantic-settings==2.16.3
+python-dotenv==1.2.4
+click==8.5.1
+uvicorn==0.54.0
+starlette==1.10.0
 
 # Development and testing
-pytest>=7.4.0
-pytest-asyncio>=0.21.0
-pytest-cov>=4.1.0
+pytest==9.2.0
+pytest-asyncio==1.5.0
+pytest-cov==7.1.0

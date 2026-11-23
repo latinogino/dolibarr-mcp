@@ -1,9 +1,12 @@
 """Professional Dolibarr MCP Server with comprehensive CRUD operations."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import sys
 import logging
+import hmac
 import uuid
 from datetime import datetime
 from contextlib import asynccontextmanager
@@ -21,6 +24,7 @@ from .dolibarr_client import DolibarrClient, DolibarrAPIError
 
 # HTTP transport imports
 from starlette.applications import Starlette
+from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 from starlette.routing import Route
@@ -44,9 +48,33 @@ def _escape_sqlfilter(value: str) -> str:
     return value.replace("'", "''")
 
 
+RAW_API_TOOL = "dolibarr_raw_api"
+_WRITE_PREFIXES = ("create_", "update_", "delete_", "add_", "set_", "validate_")
+
+
+def is_write_tool(name: str) -> bool:
+    """Return True for tools that modify data in Dolibarr."""
+    return name == RAW_API_TOOL or name.startswith(_WRITE_PREFIXES)
+
+
+def is_tool_allowed(name: str, config: Config) -> bool:
+    """Apply read-only and raw-API policies to a tool name."""
+    if name == RAW_API_TOOL and not config.mcp_enable_raw_api:
+        return False
+    if config.mcp_read_only and is_write_tool(name):
+        return False
+    return True
+
+
 @server.list_tools()
 async def handle_list_tools():
-    """List all available tools."""
+    """List the tools allowed by the current configuration."""
+    config = Config()
+    return [tool for tool in _all_tools() if is_tool_allowed(tool.name, config)]
+
+
+def _all_tools():
+    """Full catalogue of tools, before policy filtering."""
     return [
         # System & Info
         Tool(
@@ -1145,9 +1173,18 @@ async def handle_call_tool(name: str, arguments: dict):
     try:
         # Initialize the config and client
         config = Config()
-        
+
+        if not is_tool_allowed(name, config):
+            denied = {
+                "error": "Forbidden",
+                "status": 403,
+                "message": f"Tool '{name}' is disabled by server policy "
+                "(MCP_READ_ONLY / MCP_ENABLE_RAW_API).",
+            }
+            return [TextContent(type="text", text=json.dumps(denied, indent=2))]
+
         async with DolibarrClient(config) as client:
-            
+
             # System & Info
             if name == "test_connection":
                 result = await client.get_status()
@@ -1463,8 +1500,37 @@ async def _run_stdio_server(_config: Config) -> None:
         )
 
 
-def _build_http_app(session_manager: StreamableHTTPSessionManager) -> Starlette:
+class BearerAuthMiddleware:
+    """Pure ASGI middleware enforcing `Authorization: Bearer <token>`."""
+
+    def __init__(self, app, token: str):
+        self.app = app
+        self.expected = f"Bearer {token}".encode()
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] != "http" or scope.get("method") == "OPTIONS":
+            await self.app(scope, receive, send)
+            return
+        provided = b""
+        for key, value in scope.get("headers", []):
+            if key == b"authorization":
+                provided = value
+                break
+        if not hmac.compare_digest(provided, self.expected):
+            response = Response(
+                '{"error": "Unauthorized"}',
+                status_code=401,
+                media_type="application/json",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
+
+
+def _build_http_app(session_manager: StreamableHTTPSessionManager, config: Config | None = None) -> Starlette:
     """Create Starlette app that forwards to the StreamableHTTP session manager."""
+    config = config or Config()
 
     class ASGIEndpoint:
         """Lightweight adapter so Route treats our handler as an ASGI app."""
@@ -1475,17 +1541,7 @@ def _build_http_app(session_manager: StreamableHTTPSessionManager) -> Starlette:
         async def __call__(self, scope: Scope, receive: Receive, send: Send):
             await self.handler(scope, receive, send)
 
-    async def options_handler(request):
-        """Lightweight CORS-friendly response for preflight requests."""
-        return Response(
-            status_code=204,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
-                "Access-Control-Allow-Headers": "*",
-            },
-        )
-
+    @asynccontextmanager
     async def lifespan(app):
         async with session_manager.run():
             yield
@@ -1496,32 +1552,46 @@ def _build_http_app(session_manager: StreamableHTTPSessionManager) -> Starlette:
 
     asgi_endpoint = ASGIEndpoint(asgi_handler)
 
-    app = Starlette(
+    middleware = []
+    origins = config.cors_origins
+    if origins:
+        # CORS only for explicitly allowed origins (MCP_CORS_ORIGINS).
+        middleware.append(
+            Middleware(
+                CORSMiddleware,
+                allow_origins=origins,
+                allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+                allow_headers=["Authorization", "Content-Type", "Accept", "Mcp-Session-Id", "Mcp-Protocol-Version"],
+                expose_headers=["Mcp-Session-Id"],
+                allow_credentials=False,
+            )
+        )
+    if config.mcp_http_token:
+        # Added after CORS so preflight requests are answered before auth.
+        middleware.append(Middleware(BearerAuthMiddleware, token=config.mcp_http_token))
+
+    return Starlette(
         routes=[
             Route("/", asgi_endpoint, methods=["GET", "POST", "DELETE"]),
             Route("/{path:path}", asgi_endpoint, methods=["GET", "POST", "DELETE"]),
-            Route("/", options_handler, methods=["OPTIONS"]),
-            Route("/{path:path}", options_handler, methods=["OPTIONS"]),
         ],
+        middleware=middleware,
         lifespan=lifespan,
     )
-
-    # Allow cross-origin requests from MCP-enabled web UIs and dashboards.
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
-        allow_credentials=False,
-    )
-
-    return app
 
 
 async def _run_http_server(config: Config) -> None:
     """Run the MCP server over HTTP (StreamableHTTP)."""
+    if not config.mcp_http_token and not config.http_host_is_loopback:
+        raise RuntimeError(
+            f"Refusing to listen on {config.mcp_http_host} without authentication: "
+            "set MCP_HTTP_TOKEN (or bind MCP_HTTP_HOST to 127.0.0.1)."
+        )
+    if not config.mcp_http_token:
+        print("⚠️  MCP_HTTP_TOKEN not set - HTTP listener is unauthenticated (loopback only)", file=sys.stderr)
+
     session_manager = StreamableHTTPSessionManager(server, json_response=False, stateless=False)
-    app = _build_http_app(session_manager)
+    app = _build_http_app(session_manager, config)
     print(
         f"🌐 Starting MCP HTTP server on {config.mcp_http_host}:{config.mcp_http_port}",
         file=sys.stderr,

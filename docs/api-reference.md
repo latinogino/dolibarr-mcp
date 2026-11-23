@@ -29,7 +29,7 @@ implements for PrestaShop.
 | Orders          | `/orders`                   | Order CRUD operations                   |
 | Projects        | `/projects`                 | Project CRUD operations & Search        |
 | Contacts        | `/contacts`                 | Contact CRUD operations                 |
-| Raw passthrough | Any relative path           | `dolibarr_raw_api` tool for quick tests |
+| Raw passthrough | Any relative path           | `dolibarr_raw_api` tool for quick tests (disabled unless `MCP_ENABLE_RAW_API=true`) |
 
 Every endpoint supports create, read, update and delete operations unless noted
 otherwise. The Dolibarr instance that informed this reference currently contains

@@ -4,6 +4,18 @@ All notable changes to the Dolibarr MCP Server are documented here. The project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and adopts the
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format.
 
+## [1.2.0] - Security hardening (ineoit fork)
+
+### Security
+- Bearer token authentication for the HTTP transport (`MCP_HTTP_TOKEN`); refuses to listen on a non-loopback interface without it.
+- HTTP listener binds `127.0.0.1` by default; Docker Compose publishes on `127.0.0.1` and requires `MCP_HTTP_TOKEN`.
+- CORS wildcard removed; origins must be allow-listed via `MCP_CORS_ORIGINS`.
+- `MCP_READ_ONLY` mode hiding and rejecting every write tool.
+- `dolibarr_raw_api` disabled by default (`MCP_ENABLE_RAW_API`).
+
+### Fixed
+- Pinned dependencies: `mcp>=1.0.0` now resolves to mcp 2.x, which breaks the server; constrained to `mcp<2` and pinned tested versions in `requirements.txt`. Minimum Python is now 3.10.
+
 ### Added
 - Restored README.md and CHANGELOG.md after merge conflicts while preserving the streamlined structure shared with `prestashop-mcp`.
 - Documented platform-specific setup covering Linux/macOS shells, Windows Visual Studio `vsenv`, and the Docker workflow.
