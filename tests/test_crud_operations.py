@@ -70,6 +70,32 @@ class TestCRUDOperations:
             result = await client.delete_customer(1)
             assert result["success"] is True
     
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("type_value, expected", [
+        (1, {"client": 1, "fournisseur": 0, "code_client": "-1"}),
+        (2, {"client": 0, "fournisseur": 1, "code_fournisseur": "-1"}),
+        (3, {"client": 1, "fournisseur": 1, "code_client": "-1", "code_fournisseur": "-1"}),
+    ])
+    async def test_create_thirdparty_requests_auto_codes(self, client, type_value, expected):
+        """Numbering modules need code_client/code_fournisseur='-1' to generate codes."""
+        with patch.object(client, 'request') as mock_request:
+            mock_request.return_value = 5
+            await client.create_customer(name="ACME SARL", type=type_value)
+        payload = mock_request.call_args.kwargs["data"]
+        for key, value in expected.items():
+            assert payload[key] == value
+        if type_value == 1:
+            assert "code_fournisseur" not in payload
+        if type_value == 2:
+            assert "code_client" not in payload
+
+    @pytest.mark.asyncio
+    async def test_create_thirdparty_keeps_explicit_code(self, client):
+        with patch.object(client, 'request') as mock_request:
+            mock_request.return_value = 5
+            await client.create_customer(name="X", type=2, code_fournisseur="SU-MANUAL")
+        assert mock_request.call_args.kwargs["data"]["code_fournisseur"] == "SU-MANUAL"
+
     # Product CRUD Tests
     
     @pytest.mark.asyncio
