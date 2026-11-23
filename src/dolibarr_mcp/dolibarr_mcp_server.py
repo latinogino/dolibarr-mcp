@@ -5,7 +5,7 @@ import json
 import sys
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 
 # Import MCP components
@@ -1383,7 +1383,7 @@ async def handle_call_tool(name: str, arguments: dict):
             "error": "Dolibarr API Error",
             "status": e.status_code or 500,
             "message": str(e),
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
         return [TextContent(type="text", text=json.dumps(error_payload, indent=2))]
     
@@ -1394,7 +1394,7 @@ async def handle_call_tool(name: str, arguments: dict):
             "status": 500,
             "message": f"Tool execution failed: {str(e)}",
             "correlation_id": correlation_id,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
         print(f"🔥 Tool execution error ({correlation_id}): {e}", file=sys.stderr)  # Debug logging
         return [TextContent(type="text", text=json.dumps(error_result, indent=2))]
