@@ -3,7 +3,7 @@
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
@@ -123,7 +123,7 @@ class DolibarrClient:
     @staticmethod
     def _now_iso() -> str:
         """Return current UTC timestamp in ISO format with Z suffix."""
-        return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+        return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
     @staticmethod
     def _generate_correlation_id() -> str:
@@ -132,7 +132,7 @@ class DolibarrClient:
 
     def _generate_reference(self) -> str:
         """Generate a unique reference using prefix, timestamp, and a UUID suffix."""
-        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
         suffix = uuid4().hex[:8]
         return f"{self.ref_autogen_prefix}_{timestamp}_{suffix}"
 
