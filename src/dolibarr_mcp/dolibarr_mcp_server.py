@@ -16,9 +16,10 @@ from mcp.server.models import InitializationOptions
 from mcp.server import NotificationOptions, Server
 from mcp.server.stdio import stdio_server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
-from mcp.types import Tool, TextContent
+from mcp.types import CallToolResult, Tool, TextContent
 
 # Import our Dolibarr components
+from . import __version__
 from .config import Config
 from .dolibarr_client import DolibarrClient, DolibarrAPIError
 
@@ -40,7 +41,15 @@ logging.basicConfig(
 )
 
 # Create server instance
-server = Server("dolibarr-mcp")
+server = Server("dolibarr-mcp", version=__version__)
+
+
+def _error_result(payload: dict) -> CallToolResult:
+    """Wrap an error payload so MCP clients see it as a failed tool call."""
+    return CallToolResult(
+        content=[TextContent(type="text", text=json.dumps(payload, indent=2))],
+        isError=True,
+    )
 
 
 def _escape_sqlfilter(value: str) -> str:
@@ -1181,7 +1190,7 @@ async def handle_call_tool(name: str, arguments: dict):
                 "message": f"Tool '{name}' is disabled by server policy "
                 "(MCP_READ_ONLY / MCP_ENABLE_RAW_API).",
             }
-            return [TextContent(type="text", text=json.dumps(denied, indent=2))]
+            return _error_result(denied)
 
         async with DolibarrClient(config) as client:
 
@@ -1422,7 +1431,7 @@ async def handle_call_tool(name: str, arguments: dict):
             "message": str(e),
             "timestamp": datetime.utcnow().isoformat() + "Z",
         }
-        return [TextContent(type="text", text=json.dumps(error_payload, indent=2))]
+        return _error_result(error_payload)
     
     except Exception as e:
         correlation_id = str(uuid.uuid4())
@@ -1434,7 +1443,7 @@ async def handle_call_tool(name: str, arguments: dict):
             "timestamp": datetime.utcnow().isoformat() + "Z",
         }
         print(f"🔥 Tool execution error ({correlation_id}): {e}", file=sys.stderr)  # Debug logging
-        return [TextContent(type="text", text=json.dumps(error_result, indent=2))]
+        return _error_result(error_result)
 
 
 @asynccontextmanager
@@ -1491,7 +1500,7 @@ async def _run_stdio_server(_config: Config) -> None:
             write_stream,
             InitializationOptions(
                 server_name="dolibarr-mcp",
-                server_version="1.0.1",
+                server_version=__version__,
                 capabilities=server.get_capabilities(
                     notification_options=NotificationOptions(),
                     experimental_capabilities={},

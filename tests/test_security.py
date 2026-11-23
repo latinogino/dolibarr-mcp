@@ -42,7 +42,8 @@ async def test_call_tool_rejects_disabled_tool(monkeypatch):
     monkeypatch.setenv("DOLIBARR_API_KEY", "k")
     monkeypatch.setenv("MCP_READ_ONLY", "true")
     result = await srv.handle_call_tool("delete_customer", {"customer_id": 1})
-    payload = json.loads(result[0].text)
+    assert result.isError is True
+    payload = json.loads(result.content[0].text)
     assert payload["status"] == 403
 
 

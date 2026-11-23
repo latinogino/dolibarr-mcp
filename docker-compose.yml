@@ -28,8 +28,6 @@ services:
       # Tool policy
       MCP_READ_ONLY: ${MCP_READ_ONLY:-false}
       MCP_ENABLE_RAW_API: ${MCP_ENABLE_RAW_API:-false}
-      MCP_SERVER_NAME: dolibarr-mcp
-      MCP_SERVER_VERSION: 1.0.0
 
     # Expose port for HTTP MCP clients (localhost only by default;
     # set MCP_BIND_ADDRESS=0.0.0.0 only behind a firewall/VPN/reverse proxy)
