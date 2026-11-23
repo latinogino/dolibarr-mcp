@@ -645,6 +645,17 @@ class DolibarrClient:
         
         return invoice
     
+    @staticmethod
+    def _map_line_vat(line: Dict[str, Any]) -> None:
+        """Map the tool-level ``vat`` field to Dolibarr's ``tva_tx``.
+
+        Dolibarr ignores an unknown ``vat`` key and silently books the line
+        at 0% VAT, so the rate must travel as ``tva_tx``.
+        """
+        if "vat" in line:
+            vat = line.pop("vat")
+            line.setdefault("tva_tx", vat)
+
     async def create_invoice(
         self,
         data: Optional[Dict[str, Any]] = None,
@@ -662,6 +673,7 @@ class DolibarrClient:
             for line in payload["lines"]:
                 if "product_id" in line:
                     line["fk_product"] = line.pop("product_id")
+                self._map_line_vat(line)
                 # Ensure product_type is passed if present (0=Product, 1=Service)
                 if "product_type" in line:
                     line["product_type"] = line["product_type"]
@@ -701,7 +713,8 @@ class DolibarrClient:
         # Map product_id to fk_product if present
         if "product_id" in payload:
             payload["fk_product"] = payload.pop("product_id")
-            
+        self._map_line_vat(payload)
+
         return await self.request("POST", f"invoices/{invoice_id}/lines", data=payload)
 
     async def update_invoice_line(
@@ -713,6 +726,7 @@ class DolibarrClient:
     ) -> Dict[str, Any]:
         """Update a line in an invoice."""
         payload = self._merge_payload(data, **kwargs)
+        self._map_line_vat(payload)
         return await self.request("PUT", f"invoices/{invoice_id}/lines/{line_id}", data=payload)
 
     async def delete_invoice_line(self, invoice_id: int, line_id: int) -> Dict[str, Any]:

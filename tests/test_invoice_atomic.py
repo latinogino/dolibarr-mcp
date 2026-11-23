@@ -88,3 +88,26 @@ class TestInvoiceAtomic:
         assert args[0] == "POST"
         assert args[1] == "https://test.dolibarr.com/api/index.php/invoices/1/validate"
         assert kwargs['json'] == {"idwarehouse": 5, "not_trigger": 0}
+
+    @patch('aiohttp.ClientSession.request')
+    async def test_line_vat_is_sent_as_tva_tx(self, mock_request, client):
+        """Dolibarr ignores 'vat' and books 0% VAT: it must be sent as tva_tx."""
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.text.return_value = '123'
+        mock_request.return_value.__aenter__.return_value = mock_response
+
+        async with client:
+            await client.add_invoice_line(invoice_id=1, desc="L", qty=1, subprice=10, vat=20)
+            assert mock_request.call_args.kwargs['json'] == {
+                "desc": "L", "qty": 1, "subprice": 10, "tva_tx": 20
+            }
+
+            await client.update_invoice_line(invoice_id=1, line_id=10, vat=5.5)
+            assert mock_request.call_args.kwargs['json'] == {"tva_tx": 5.5}
+
+            await client.create_invoice(
+                customer_id=7, lines=[{"desc": "L", "qty": 1, "subprice": 10, "vat": 20}]
+            )
+            sent_line = mock_request.call_args.kwargs['json']["lines"][0]
+            assert sent_line["tva_tx"] == 20 and "vat" not in sent_line
