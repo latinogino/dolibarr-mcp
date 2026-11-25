@@ -61,7 +61,10 @@ class TestConfig:
             "LOG_LEVEL=WARNING\n"
         )
         
-        with patch.dict(os.environ, {'DOTENV_PATH': str(env_file)}):
+        # Start from an empty environment: importing dolibarr_mcp.config already
+        # ran load_dotenv() on the working directory, and load_dotenv() does not
+        # override variables that are already set, so a local .env would win.
+        with patch.dict(os.environ, {}, clear=True):
             # Load from env file
             from dotenv import load_dotenv
             load_dotenv(str(env_file))
