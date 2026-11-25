@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import sys
 import logging
@@ -16,7 +17,7 @@ from mcp.server.models import InitializationOptions
 from mcp.server import NotificationOptions, Server
 from mcp.server.stdio import stdio_server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
-from mcp.types import CallToolResult, Tool, TextContent
+from mcp.types import BlobResourceContents, CallToolResult, EmbeddedResource, Tool, TextContent
 
 # Import our Dolibarr components
 from . import __version__
@@ -55,6 +56,105 @@ def _error_result(payload: dict) -> CallToolResult:
 def _escape_sqlfilter(value: str) -> str:
     """Escape single quotes for SQL filters."""
     return value.replace("'", "''")
+
+
+MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+_TEXT_MIME_PREFIXES = ("text/",)
+_TEXT_MIME_TYPES = ("application/xml", "application/json")
+
+
+def _summarize_document(doc: dict) -> dict:
+    """Compact view of a /documents entry, with the path download_document expects."""
+    name = doc.get("name")
+    level1 = doc.get("level1name")
+    timestamp = doc.get("date")
+    date_iso = None
+    if isinstance(timestamp, (int, float)) or (isinstance(timestamp, str) and timestamp.isdigit()):
+        date_iso = datetime.fromtimestamp(int(timestamp), timezone.utc).isoformat().replace("+00:00", "Z")
+    return {
+        "name": name,
+        "original_file": f"{level1}/{name}" if level1 else name,
+        "size": doc.get("size"),
+        "date": date_iso,
+        "type": doc.get("type"),
+    }
+
+
+def _extract_pdf_attachments(data: bytes) -> list[dict]:
+    """Return files embedded in a PDF (e.g. Factur-X 'factur-x.xml')."""
+    try:
+        from io import BytesIO
+        from pypdf import PdfReader
+    except ImportError:  # pragma: no cover - pypdf is a declared dependency
+        return []
+    try:
+        reader = PdfReader(BytesIO(data))
+        attachments = reader.attachments
+    except Exception as exc:  # malformed PDF: still return the file itself
+        logging.getLogger(__name__).warning("Cannot read PDF attachments: %s", exc)
+        return []
+    extracted = []
+    for filename, contents in attachments.items():
+        for blob in contents:
+            entry = {"name": filename, "size": len(blob)}
+            try:
+                entry["text"] = blob.decode("utf-8")
+            except UnicodeDecodeError:
+                entry["text"] = None
+                entry["note"] = "binary attachment, not returned"
+            extracted.append(entry)
+    return extracted
+
+
+def _document_contents(downloaded: dict, modulepart: str, original_file: str, include_file: bool = True):
+    """Turn a /documents/download response into MCP content blocks."""
+    content_b64 = downloaded.get("content") or ""
+    encoding = downloaded.get("encoding")
+    mime = downloaded.get("content-type") or "application/octet-stream"
+    filename = downloaded.get("filename") or original_file.rsplit("/", 1)[-1]
+
+    raw = base64.b64decode(content_b64) if encoding == "base64" else content_b64.encode("utf-8")
+    if len(raw) > MAX_DOCUMENT_BYTES:
+        return _error_result({
+            "error": "Payload Too Large",
+            "status": 413,
+            "message": f"'{original_file}' is {len(raw)} bytes (limit {MAX_DOCUMENT_BYTES}).",
+        })
+
+    is_pdf = mime == "application/pdf" or filename.lower().endswith(".pdf")
+    is_text = mime.startswith(_TEXT_MIME_PREFIXES) or mime in _TEXT_MIME_TYPES
+    embedded = _extract_pdf_attachments(raw) if is_pdf else []
+
+    meta = {
+        "filename": filename,
+        "original_file": original_file,
+        "content_type": mime,
+        "size": len(raw),
+        "embedded_files": [
+            {k: v for k, v in e.items() if k != "text"} for e in embedded
+        ],
+    }
+    blocks: list = [TextContent(type="text", text=json.dumps(meta, indent=2))]
+    for entry in embedded:
+        if entry.get("text") is not None:
+            blocks.append(TextContent(
+                type="text",
+                text=f"--- embedded file: {entry['name']} ---\n{entry['text']}",
+            ))
+
+    if include_file:
+        if is_text:
+            blocks.append(TextContent(type="text", text=raw.decode("utf-8", errors="replace")))
+        else:
+            blocks.append(EmbeddedResource(
+                type="resource",
+                resource=BlobResourceContents(
+                    uri=f"dolibarr://documents/{modulepart}/{original_file}",
+                    mimeType=mime,
+                    blob=base64.b64encode(raw).decode("ascii"),
+                ),
+            ))
+    return blocks
 
 
 RAW_API_TOOL = "dolibarr_raw_api"
@@ -1138,6 +1238,62 @@ def _all_tools():
             },
         ),
 
+        # Documents
+        Tool(
+            name="get_documents",
+            description=(
+                "List the files attached to a Dolibarr object (generated PDFs, Factur-X PDFs, uploaded files). "
+                "Identify the object by its ref (e.g. 'FA2024-0001') or numeric id. Each entry includes "
+                "'original_file', to pass to download_document."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "modulepart": {
+                        "type": "string",
+                        "description": (
+                            "Object type: invoice, supplier_invoice, order, supplier_order, propal, "
+                            "shipment, contract, thirdparty, product, expensereport, member, user "
+                            "(Dolibarr also accepts its French names: facture, commande, societe...)."
+                        ),
+                    },
+                    "ref": {"type": "string", "description": "Object reference (e.g. 'FA2024-0001')."},
+                    "id": {"type": "integer", "description": "Object numeric id (alternative to ref)."},
+                },
+                "required": ["modulepart"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="download_document",
+            description=(
+                "Download one attached file. PDFs are returned as an embedded resource; files embedded in "
+                "the PDF (e.g. the Factur-X 'factur-x.xml') are extracted and returned as text. Text files "
+                "are returned as text. Use get_documents first to obtain 'original_file'."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "modulepart": {
+                        "type": "string",
+                        "description": "Same object type as used with get_documents (e.g. 'invoice').",
+                    },
+                    "original_file": {
+                        "type": "string",
+                        "description": "Relative path from get_documents (e.g. 'FA2024-0001/FA2024-0001_facturx.pdf').",
+                    },
+                    "include_file": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "Return the binary file itself (default true). Set false to get only "
+                        "metadata and extracted embedded files (smaller response).",
+                    },
+                },
+                "required": ["modulepart", "original_file"],
+                "additionalProperties": False,
+            },
+        ),
+
         # Raw API Access
         Tool(
             name="dolibarr_raw_api",
@@ -1414,6 +1570,32 @@ async def handle_call_tool(name: str, arguments: dict):
 
             elif name == "delete_project":
                 result = await client.delete_project(arguments["project_id"])
+
+            # Documents
+            elif name == "get_documents":
+                if not arguments.get("ref") and arguments.get("id") is None:
+                    return _error_result({
+                        "error": "Bad Request",
+                        "status": 400,
+                        "message": "Provide either 'ref' or 'id'.",
+                    })
+                docs = await client.get_documents(
+                    arguments["modulepart"],
+                    ref=arguments.get("ref"),
+                    id=arguments.get("id"),
+                )
+                result = [_summarize_document(d) for d in docs]
+
+            elif name == "download_document":
+                downloaded = await client.download_document(
+                    arguments["modulepart"], arguments["original_file"]
+                )
+                return _document_contents(
+                    downloaded,
+                    arguments["modulepart"],
+                    arguments["original_file"],
+                    include_file=arguments.get("include_file", True),
+                )
 
             # Raw API Access
             elif name == "dolibarr_raw_api":
