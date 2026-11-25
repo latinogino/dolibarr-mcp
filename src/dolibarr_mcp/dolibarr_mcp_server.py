@@ -717,6 +717,14 @@ def _all_tools():
                         "type": "string",
                         "description": "Due date (YYYY-MM-DD)",
                     },
+                    "cond_reglement_id": {
+                        "type": "integer",
+                        "description": "Payment terms ID (Dolibarr c_payment_term rowid, e.g. the value used on the customer's previous invoices)",
+                    },
+                    "mode_reglement_id": {
+                        "type": "integer",
+                        "description": "Payment method ID (Dolibarr c_paiement id, e.g. the value used on the customer's previous invoices)",
+                    },
                 },
                 "required": ["invoice_id"],
                 "additionalProperties": False,
@@ -807,7 +815,7 @@ def _all_tools():
         ),
         Tool(
             name="update_invoice_line",
-            description="Update an existing line in a draft invoice.",
+            description="Update an existing line in a draft invoice. Only the given fields change; the others keep their current values.",
             inputSchema={
                 "type": "object",
                 "properties": {
