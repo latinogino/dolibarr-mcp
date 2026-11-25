@@ -10,6 +10,7 @@ import hmac
 import uuid
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
+from typing import Any, Dict, Optional
 
 # Import MCP components
 from mcp.server.models import InitializationOptions
@@ -55,6 +56,55 @@ def _error_result(payload: dict) -> CallToolResult:
 def _escape_sqlfilter(value: str) -> str:
     """Escape single quotes for SQL filters."""
     return value.replace("'", "''")
+
+
+INVOICE_LIST_MAX_LIMIT = 200
+INVOICE_SORT_FIELDS = {"date": "t.datef", "ref": "t.ref", "id": "t.rowid"}
+INVOICE_STATUS_LABELS = {0: "draft", 1: "unpaid", 2: "paid", 3: "cancelled"}
+INVOICE_TYPE_LABELS = {0: "standard", 1: "replacement", 2: "credit_note", 3: "deposit"}
+
+
+def _to_iso_date(value: Any) -> Optional[str]:
+    """Convert a Dolibarr timestamp (int or numeric string) to YYYY-MM-DD.
+
+    Dolibarr stores invoice dates as local midnight, so convert in local time:
+    converting to UTC would shift dates one day back in Europe.
+    """
+    if value in (None, ""):
+        return None
+    try:
+        return datetime.fromtimestamp(int(value)).date().isoformat()
+    except (TypeError, ValueError, OverflowError, OSError):
+        return str(value)
+
+
+def _to_int(value: Any) -> Optional[int]:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _summarize_invoice(invoice: Dict[str, Any]) -> Dict[str, Any]:
+    """Keep only the fields useful to list invoices (raw objects are ~10 KB each)."""
+    status = _to_int(invoice.get("status", invoice.get("statut")))
+    inv_type = _to_int(invoice.get("type"))
+    return {
+        "id": _to_int(invoice.get("id")),
+        "ref": invoice.get("ref"),
+        "ref_client": invoice.get("ref_client") or None,
+        "socid": _to_int(invoice.get("socid")),
+        "type": INVOICE_TYPE_LABELS.get(inv_type, inv_type),
+        "date": _to_iso_date(invoice.get("date")),
+        "due_date": _to_iso_date(invoice.get("date_lim_reglement")),
+        "total_ht": invoice.get("total_ht"),
+        "total_tva": invoice.get("total_tva"),
+        "total_ttc": invoice.get("total_ttc"),
+        "status": INVOICE_STATUS_LABELS.get(status, status),
+        "paid": str(invoice.get("paye")) == "1",
+        "remain_to_pay": invoice.get("remaintopay"),
+        "project_id": _to_int(invoice.get("fk_project")),
+    }
 
 
 RAW_API_TOOL = "dolibarr_raw_api"
@@ -499,21 +549,53 @@ def _all_tools():
         Tool(
             name="get_invoices",
             description=(
-                "Get a paginated list of invoices from Dolibarr, optionally filtered by status. "
-                "Use this only if you really need a list of many invoices (e.g. overviews, reports). "
-                "Do not use this as a search-by-customer or search-by-reference tool."
+                "List invoices, newest first by default, optionally filtered by customer and/or status. "
+                "To get a customer's latest invoices, resolve the customer's socid first (search_customers) "
+                "and pass it as customer_id. Returns a compact summary per invoice (ref, dates, totals, "
+                "status, remaining amount); use get_invoice_by_id for lines and full details. "
+                "Use page to walk through larger result sets."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "limit": {
+                    "customer_id": {
                         "type": "integer",
-                        "description": "Maximum number of invoices to return (default: 100)",
-                        "default": 100,
+                        "description": "Only invoices of this third party (Dolibarr socid).",
                     },
                     "status": {
                         "type": "string",
-                        "description": "Invoice status filter (draft, unpaid, paid, etc.)",
+                        "enum": ["draft", "unpaid", "paid", "cancelled"],
+                        "description": "Invoice status filter.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of invoices per page (default: 20, max: 200).",
+                        "default": 20,
+                        "minimum": 1,
+                        "maximum": 200,
+                    },
+                    "page": {
+                        "type": "integer",
+                        "description": "Zero-based page number (default: 0).",
+                        "default": 0,
+                        "minimum": 0,
+                    },
+                    "sort_by": {
+                        "type": "string",
+                        "enum": ["date", "ref", "id"],
+                        "description": "Sort field (default: date).",
+                        "default": "date",
+                    },
+                    "sort_order": {
+                        "type": "string",
+                        "enum": ["desc", "asc"],
+                        "description": "Sort order (default: desc, newest first).",
+                        "default": "desc",
+                    },
+                    "full": {
+                        "type": "boolean",
+                        "description": "Return the raw Dolibarr objects instead of the compact summary (much larger).",
+                        "default": False,
                     },
                 },
                 "additionalProperties": False,
@@ -1299,10 +1381,25 @@ async def handle_call_tool(name: str, arguments: dict):
             
             # Invoice Management
             elif name == "get_invoices":
-                result = await client.get_invoices(
-                    limit=arguments.get('limit', 100),
-                    status=arguments.get('status')
+                limit = max(1, min(int(arguments.get('limit', 20)), INVOICE_LIST_MAX_LIMIT))
+                sort_by = arguments.get('sort_by', 'date')
+                sort_order = arguments.get('sort_order', 'desc')
+                if sort_by not in INVOICE_SORT_FIELDS:
+                    raise ValueError(f"sort_by must be one of {sorted(INVOICE_SORT_FIELDS)}")
+                if sort_order not in ('asc', 'desc'):
+                    raise ValueError("sort_order must be 'asc' or 'desc'")
+                invoices = await client.get_invoices(
+                    limit=limit,
+                    status=arguments.get('status'),
+                    customer_id=arguments.get('customer_id'),
+                    page=max(0, int(arguments.get('page', 0))),
+                    sortfield=INVOICE_SORT_FIELDS[sort_by],
+                    sortorder=sort_order.upper(),
                 )
+                if arguments.get('full'):
+                    result = invoices
+                else:
+                    result = [_summarize_invoice(inv) for inv in invoices]
             
             elif name == "get_invoice_by_id":
                 result = await client.get_invoice_by_id(arguments['invoice_id'])
