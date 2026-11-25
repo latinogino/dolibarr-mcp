@@ -4,6 +4,12 @@ All notable changes to the Dolibarr MCP Server are documented here. The project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and adopts the
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format.
 
+## [Unreleased]
+
+### Added
+- `get_documents` tool: list files attached to an object (invoice, order, propal, thirdparty...) by ref or id.
+- `download_document` tool: return a file as an embedded resource (10 MB limit) and extract files embedded in PDFs, such as the Factur-X `factur-x.xml`, as text. Adds the `pypdf` dependency.
+
 ## [1.2.0] - Security hardening
 
 ### Security

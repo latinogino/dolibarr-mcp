@@ -8,6 +8,7 @@ python-dotenv==1.2.4
 click==8.5.1
 uvicorn==0.54.0
 starlette==1.10.0
+pypdf==7.1.1
 
 # Development and testing
 pytest==9.2.0

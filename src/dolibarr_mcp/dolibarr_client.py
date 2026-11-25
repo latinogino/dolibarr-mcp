@@ -981,6 +981,30 @@ class DolibarrClient:
         return await self.request("DELETE", f"projects/{project_id}")
 
     # ============================================================================
+    # DOCUMENTS (attached / generated files)
+    # ============================================================================
+
+    async def get_documents(
+        self,
+        modulepart: str,
+        ref: Optional[str] = None,
+        id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """List files attached to an object (GET /documents)."""
+        params: Dict[str, Any] = {"modulepart": modulepart}
+        if ref:
+            params["ref"] = ref
+        if id is not None:
+            params["id"] = id
+        result = await self.request("GET", "documents", params=params)
+        return result if isinstance(result, list) else []
+
+    async def download_document(self, modulepart: str, original_file: str) -> Dict[str, Any]:
+        """Download one file (GET /documents/download); content is base64-encoded."""
+        params = {"modulepart": modulepart, "original_file": original_file}
+        return await self.request("GET", "documents/download", params=params)
+
+    # ============================================================================
     # RAW API CALL
     # ============================================================================
     

@@ -29,6 +29,7 @@ implements for PrestaShop.
 | Orders          | `/orders`                   | Order CRUD operations                   |
 | Projects        | `/projects`                 | Project CRUD operations & Search        |
 | Contacts        | `/contacts`                 | Contact CRUD operations                 |
+| Documents       | `/documents`, `/documents/download` | `get_documents` (list attached files), `download_document` (file as embedded resource + embedded Factur-X XML as text) |
 | Raw passthrough | Any relative path           | `dolibarr_raw_api` tool for quick tests (disabled unless `MCP_ENABLE_RAW_API=true`) |
 
 Every endpoint supports create, read, update and delete operations unless noted

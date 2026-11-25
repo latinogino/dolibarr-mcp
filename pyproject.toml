@@ -38,6 +38,7 @@ dependencies = [
     "click>=8.1.0",
     "python-dotenv>=1.0.0",
     "uvicorn>=0.25.0",
+    "pypdf>=5.0",
 ]
 
 [project.optional-dependencies]
