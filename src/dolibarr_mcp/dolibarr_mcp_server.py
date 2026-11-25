@@ -367,7 +367,7 @@ def _all_tools():
                     },
                     "page": {
                         "type": "integer",
-                        "description": "Page number for pagination (default: 1)",
+                        "description": "Page number, starting at 1 (default: 1)",
                         "default": 1,
                     },
                 },
@@ -465,7 +465,7 @@ def _all_tools():
                     },
                     "page": {
                         "type": "integer",
-                        "description": "Page number for pagination (default: 1)",
+                        "description": "Page number, starting at 1 (default: 1)",
                         "default": 1,
                     },
                 },
@@ -1218,7 +1218,7 @@ def _all_tools():
                     },
                     "page": {
                         "type": "integer",
-                        "description": "Page number for pagination (default: 1)",
+                        "description": "Page number, starting at 1 (default: 1)",
                         "default": 1,
                     },
                     "status": {

@@ -6,6 +6,9 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and adopts th
 
 ## [Unreleased]
 
+### Fixed
+- `get_projects` returned an empty list and `get_users` / `get_customers` skipped the second page: Dolibarr pages start at 0, tool pages start at 1. Reported by Guenter Lukas (latinogino/dolibarr-mcp#30).
+
 ## [1.3.0] - 2026-11-25
 
 ### Added

@@ -109,5 +109,5 @@ class TestProjectOperations:
             params = kwargs["params"]
             
             assert params["limit"] == 50
-            assert params["page"] == 2
+            assert params["page"] == 1  # Dolibarr pages start at 0
             assert params["status"] == 1
