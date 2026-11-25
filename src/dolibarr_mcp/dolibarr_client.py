@@ -547,6 +547,14 @@ class DolibarrClient:
         payload.setdefault("status", payload.get("status", 1))
         payload.setdefault("country_id", payload.get("country_id", 1))
 
+        # With numbering modules (e.g. "elephant": CU2026-0001 / SU2026-0001)
+        # Dolibarr requires the customer/supplier code and only generates it
+        # when asked with "-1"; without it the creation fails with a 500.
+        if payload.get("client") in (1, 3, "1", "3"):
+            payload.setdefault("code_client", "-1")
+        if payload.get("fournisseur") in (1, "1"):
+            payload.setdefault("code_fournisseur", "-1")
+
         result = await self.request("POST", "thirdparties", data=payload)
         return self._extract_identifier(result)
 
