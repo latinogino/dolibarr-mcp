@@ -72,5 +72,5 @@ LABEL org.opencontainers.image.title="Dolibarr MCP Server" \
       org.opencontainers.image.description="Professional Model Context Protocol server for Dolibarr ERP integration" \
       org.opencontainers.image.url="https://github.com/latinogino/dolibarr-mcp" \
       org.opencontainers.image.source="https://github.com/latinogino/dolibarr-mcp" \
-      org.opencontainers.image.version="1.3.0" \
+      org.opencontainers.image.version="1.4.0" \
       org.opencontainers.image.licenses="MIT"
