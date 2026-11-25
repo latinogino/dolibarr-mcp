@@ -53,9 +53,22 @@ def _error_result(payload: dict) -> CallToolResult:
     )
 
 
+_APOSTROPHES = ("'", "\u2019", "\u2018")
+
+
 def _escape_sqlfilter(value: str) -> str:
-    """Escape single quotes for SQL filters."""
-    return value.replace("'", "''")
+    """Make a user value safe inside a quoted ``like`` value of Dolibarr sqlfilters.
+
+    Dolibarr's sqlfilters cannot match a literal apostrophe: doubled (''),
+    backslash-escaped (\\') or raw, a quote inside the value never matches
+    (checked on Dolibarr 21), so a search for "O'BRIEN" returned 404.
+    Apostrophes (straight or typographic) are replaced by the LIKE single-
+    character wildcard ``_``, which matches the stored apostrophe and also
+    keeps the value from closing the quoted string.
+    """
+    for apostrophe in _APOSTROPHES:
+        value = value.replace(apostrophe, "_")
+    return value
 
 
 INVOICE_LIST_MAX_LIMIT = 200

@@ -77,3 +77,19 @@ async def test_search_customers():
         call_args = mock_instance.search_customers.call_args
         assert "sqlfilters" in call_args.kwargs
         assert "Acme" in call_args.kwargs["sqlfilters"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("query", ["O'BRIEN", "O’BRIEN"])
+async def test_search_customers_apostrophe_becomes_like_wildcard(query):
+    # Dolibarr sqlfilters cannot match a literal apostrophe, whatever the escaping.
+    with patch("dolibarr_mcp.dolibarr_mcp_server.DolibarrClient") as MockClient:
+        mock_instance = MockClient.return_value
+        mock_instance.__aenter__.return_value = mock_instance
+        mock_instance.search_customers = AsyncMock(return_value=[{"id": 42, "name": "O'BRIEN"}])
+
+        await handle_call_tool("search_customers", {"query": query})
+
+        assert mock_instance.search_customers.call_args.kwargs["sqlfilters"] == (
+            "((t.nom:like:'%O_BRIEN%') OR (t.name_alias:like:'%O_BRIEN%'))"
+        )
