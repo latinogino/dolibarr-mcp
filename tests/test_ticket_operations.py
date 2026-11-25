@@ -195,3 +195,30 @@ class TestTicketOperations:
 
             assert "ticket_id or ref" in exc.value.response_data["missing_fields"]
             mock_request.assert_not_called()
+
+
+class TestTicketAdaptations:
+    """Pagination, empty lists and ref encoding."""
+
+    @pytest.fixture
+    def client(self):
+        return DolibarrClient(Config(dolibarr_url="https://test.dolibarr.com", dolibarr_api_key="k"))
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("page, expected", [(1, None), (2, 1)])
+    async def test_get_tickets_page_is_zero_based(self, client, page, expected):
+        with patch.object(client, 'request', new=AsyncMock(return_value=[])) as mock_request:
+            await client.get_tickets(page=page)
+        assert mock_request.call_args[1]["params"].get("page") == expected
+
+    @pytest.mark.asyncio
+    async def test_get_tickets_empty_list_on_404(self, client):
+        from dolibarr_mcp.dolibarr_client import DolibarrAPIError
+        with patch.object(client, 'request', new=AsyncMock(side_effect=DolibarrAPIError("Not found", status_code=404))):
+            assert await client.get_tickets() == []
+
+    @pytest.mark.asyncio
+    async def test_get_ticket_by_ref_is_url_encoded(self, client):
+        with patch.object(client, 'request', new=AsyncMock(return_value={})) as mock_request:
+            await client.get_ticket_by_ref("TI/1 2")
+        assert mock_request.call_args[0][1] == "tickets/ref/TI%2F1%202"

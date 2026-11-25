@@ -6,6 +6,9 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and adopts th
 
 ## [Unreleased]
 
+### Added
+- Ticket management tools: `get_tickets` (open tickets by default, optional status filter), `get_ticket_by_ref`, `search_tickets`, `create_ticket`, `add_ticket_message` and `update_ticket`. Tickets are addressed by their `ref`; `add_ticket_message` and `update_ticket` resolve it to the `track_id` / numeric id. Contributed by Guenter Lukas (latinogino/dolibarr-mcp#28).
+
 ### Fixed
 - `get_projects` returned an empty list and `get_users` / `get_customers` skipped the second page: Dolibarr pages start at 0, tool pages start at 1. Reported by Guenter Lukas (latinogino/dolibarr-mcp#30).
 

@@ -5,6 +5,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import quote
 from uuid import uuid4
 
 import aiohttp
@@ -469,6 +470,16 @@ class DolibarrClient:
     # USER MANAGEMENT
     # ============================================================================
     
+    async def _get_list(self, endpoint: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """GET a list endpoint; Dolibarr answers 404 when the (filtered) list is empty."""
+        try:
+            result = await self.request("GET", endpoint, params=params)
+        except DolibarrAPIError as exc:
+            if exc.status_code == 404:
+                return []
+            raise
+        return result if isinstance(result, list) else []
+
     @staticmethod
     def _apply_page(params: Dict[str, Any], page: Optional[int]) -> None:
         """Translate a 1-based tool page into Dolibarr's 0-based ``page`` parameter.
@@ -1023,14 +1034,15 @@ class DolibarrClient:
         When ``status`` is None the open tickets are returned (excluding closed
         and cancelled). The Dolibarr ``status`` query parameter is unreliable for
         tickets, so filtering is done via ``sqlfilters`` on ``t.fk_statut``.
+        ``page`` starts at 1.
         """
-        params: Dict[str, Any] = {"limit": limit, "page": page}
+        params: Dict[str, Any] = {"limit": limit}
+        self._apply_page(params, page)
         if status is not None:
             params["sqlfilters"] = f"(t.fk_statut:=:{int(status)})"
         else:
             params["sqlfilters"] = "(t.fk_statut:!=:8) and (t.fk_statut:!=:9)"
-        result = await self.request("GET", "tickets", params=params)
-        return result if isinstance(result, list) else []
+        return await self._get_list("tickets", params)
 
     async def get_ticket_by_ref(self, ref: str) -> Dict[str, Any]:
         """Get a specific ticket by its business reference (e.g. ``TI1046``).
@@ -1038,13 +1050,12 @@ class DolibarrClient:
         The response includes the ``messages`` array and the ``track_id`` needed
         to post new messages.
         """
-        return await self.request("GET", f"tickets/ref/{ref}")
+        return await self.request("GET", f"tickets/ref/{quote(ref, safe='')}")
 
     async def search_tickets(self, sqlfilters: str, limit: int = 20) -> List[Dict[str, Any]]:
         """Search tickets using SQL filters."""
         params = {"limit": limit, "sqlfilters": sqlfilters}
-        result = await self.request("GET", "tickets", params=params)
-        return result if isinstance(result, list) else []
+        return await self._get_list("tickets", params)
 
     async def create_ticket(self, data: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
         """Create a new ticket.
