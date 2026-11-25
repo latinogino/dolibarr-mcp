@@ -469,11 +469,20 @@ class DolibarrClient:
     # USER MANAGEMENT
     # ============================================================================
     
+    @staticmethod
+    def _apply_page(params: Dict[str, Any], page: Optional[int]) -> None:
+        """Translate a 1-based tool page into Dolibarr's 0-based ``page`` parameter.
+
+        Dolibarr list endpoints number pages from 0: sending ``page=1`` returns
+        the second page, so a first-page request must send ``page=0`` (or omit it).
+        """
+        if page and page > 1:
+            params["page"] = page - 1
+
     async def get_users(self, limit: int = 100, page: int = 1) -> List[Dict[str, Any]]:
-        """Get list of users."""
-        params = {"limit": limit}
-        if page > 1:
-            params["page"] = page
+        """Get list of users (``page`` starts at 1)."""
+        params: Dict[str, Any] = {"limit": limit}
+        self._apply_page(params, page)
         
         result = await self.request("GET", "users", params=params)
         return result if isinstance(result, list) else []
@@ -517,10 +526,9 @@ class DolibarrClient:
         return result if isinstance(result, list) else []
 
     async def get_customers(self, limit: int = 100, page: int = 1) -> List[Dict[str, Any]]:
-        """Get list of customers/third parties."""
-        params = {"limit": limit}
-        if page > 1:
-            params["page"] = page
+        """Get list of customers/third parties (``page`` starts at 1)."""
+        params: Dict[str, Any] = {"limit": limit}
+        self._apply_page(params, page)
         
         result = await self.request("GET", "thirdparties", params=params)
         return result if isinstance(result, list) else []
@@ -941,8 +949,9 @@ class DolibarrClient:
     # ============================================================================
     
     async def get_projects(self, limit: int = 100, page: int = 1, status: Optional[int] = None) -> List[Dict[str, Any]]:
-        """Get list of projects."""
-        params: Dict[str, Any] = {"limit": limit, "page": page}
+        """Get list of projects (``page`` starts at 1)."""
+        params: Dict[str, Any] = {"limit": limit}
+        self._apply_page(params, page)
         if status is not None:
             params["status"] = status
         result = await self.request("GET", "projects", params=params)
